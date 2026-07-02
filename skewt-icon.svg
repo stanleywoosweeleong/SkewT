@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#131d33"/>
+      <stop offset="1" stop-color="#070b15"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.44" r="0.62">
+      <stop offset="0" stop-color="#22355a" stop-opacity="0.6"/>
+      <stop offset="1" stop-color="#22355a" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="rounded"><rect x="0" y="0" width="1024" height="1024" rx="228" ry="228"/></clipPath>
+  </defs>
+  <g clip-path="url(#rounded)">
+    <rect width="1024" height="1024" fill="url(#bg)"/>
+    <rect width="1024" height="1024" fill="url(#glow)"/>
+    <!-- pressure levels -->
+    <g stroke="#31405f" stroke-width="3" opacity="0.55">
+      <line x1="130" y1="250" x2="894" y2="250"/>
+      <line x1="130" y1="385" x2="894" y2="385"/>
+      <line x1="130" y1="520" x2="894" y2="520"/>
+      <line x1="130" y1="655" x2="894" y2="655"/>
+      <line x1="130" y1="790" x2="894" y2="790"/>
+    </g>
+    <!-- skewed isotherms (45deg) -->
+    <g stroke="#31405f" stroke-width="3" opacity="0.4">
+      <line x1="150" y1="840" x2="510" y2="210"/>
+      <line x1="330" y1="840" x2="690" y2="210"/>
+      <line x1="510" y1="840" x2="840" y2="260"/>
+      <line x1="150" y1="640" x2="320" y2="210"/>
+      <line x1="670" y1="840" x2="894" y2="450"/>
+    </g>
+    <!-- CAPE wash between curves -->
+    <path d="M 612 792 L 590 655 L 560 520 L 512 385 L 452 250
+             L 408 250 L 470 385 L 512 520 L 528 655 L 566 792 Z"
+          fill="#ff6b3d" opacity="0.13"/>
+    <!-- dew-point (green): starts bottom, leans LEFT going up, outer/left of temp -->
+    <path d="M 566 792
+             C 560 720, 542 690, 528 655
+             C 512 610, 508 560, 512 520
+             C 516 470, 486 430, 470 385
+             C 448 325, 430 295, 408 250"
+          fill="none" stroke="#3dd68c" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- temperature (red): warm surface at right, leans LEFT aloft, stays right of dew point -->
+    <path d="M 612 792
+             C 606 720, 596 690, 590 655
+             C 578 605, 566 560, 560 520
+             C 552 468, 536 428, 512 385
+             C 486 322, 470 292, 452 250"
+          fill="none" stroke="#ff6b3d" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- surface dots -->
+    <circle cx="566" cy="792" r="21" fill="#3dd68c"/>
+    <circle cx="612" cy="792" r="21" fill="#ff6b3d"/>
+  </g>
+</svg>
