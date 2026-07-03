@@ -216,6 +216,11 @@ button.compact{padding:9px 12px;font-size:15px;line-height:1}
 #fsSlider::-webkit-slider-thumb,#windSlider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:26px;height:26px;border-radius:50%;background:var(--accent);cursor:pointer;border:3px solid var(--bg);box-shadow:0 2px 6px rgba(0,0,0,.4)}
 #fsSlider::-moz-range-thumb,#windSlider::-moz-range-thumb{width:26px;height:26px;border-radius:50%;background:var(--accent);cursor:pointer;border:3px solid var(--bg)}
 svg{width:100%;height:auto;display:block;touch-action:manipulation}
+/* pin the sounding to its viewBox aspect ratio and clip any per-hour content that strays
+   outside the box (stray labels/barbs), so the chart height never shifts while scrubbing. */
+#thwrap svg{aspect-ratio:360/250;height:auto}
+#chart{aspect-ratio:540/560;height:auto;overflow:hidden}
+.chartwrap{contain:layout}
 #chart,#chartBig{-webkit-user-select:none;user-select:none;-webkit-user-drag:none;-webkit-touch-callout:none}
 #chart *,#chartBig *{-webkit-user-drag:none;user-drag:none}
 .legend-head{width:auto;display:inline-flex;align-items:center;gap:7px;margin:2px 16px 0;padding:5px 10px;font-size:11px;font-weight:700;color:var(--dim);background:transparent;border:1px solid var(--line);border-radius:8px;cursor:pointer}
@@ -226,6 +231,13 @@ svg{width:100%;height:auto;display:block;touch-action:manipulation}
 .sw{width:16px;height:3px;border-radius:2px;display:inline-block}
 .cards{padding:6px 12px}
 .cardsect{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:var(--faint);padding:14px 4px 8px}
+/* collapsible section header (chevron), reused across the card groups & panels */
+.csec-head{display:flex;align-items:center;gap:8px;width:100%;cursor:pointer;padding:12px 4px 8px;background:transparent;border:none;text-align:left;color:var(--faint);font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.09em}
+.csec-head .csec-car{color:var(--accent);font-size:11px;flex:0 0 auto;transition:transform .15s}
+.csec-head.collapsed .csec-car{transform:rotate(-90deg)}
+.csec-head .csec-t{flex:1}
+body.lang-zh .csec-head{font-size:13px;letter-spacing:.05em}
+.csec-body.collapsed{display:none}
 .cardgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:11px 12px}
 .card .k{font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.08em;font-weight:700}
@@ -245,7 +257,7 @@ svg{width:100%;height:auto;display:block;touch-action:manipulation}
 .poprow .pb.on{background:var(--accent)}
 .poprow .pcap{flex:0 0 auto;font-size:9.5px;color:var(--faint);font-weight:700;writing-mode:initial;align-self:center;margin-right:4px}
 #enswrap{margin:4px 16px 8px}
-#enswrap svg{width:100%;display:block}
+#enswrap svg{width:100%;display:block;aspect-ratio:360/170;height:auto}
 .ens-cap{font-size:11.5px;color:var(--faint);margin:2px 2px 6px;line-height:1.5}
 .ens-cap b{color:var(--dim)}
 .ens-conf{display:inline-block;padding:1px 8px;border-radius:999px;font-weight:800;font-size:10.5px;margin-left:6px}
@@ -266,6 +278,9 @@ body.lang-zh .fsum .fs-line{font-size:15px}
 .fsum .op.ok{border-color:rgba(61,214,140,.5);color:#7fe0ae}
 .fsum .op.warn{border-color:rgba(255,196,87,.5);color:#ffd58a}
 .fsum .op.bad{border-color:rgba(255,107,107,.5);color:#ff9b9b}
+.fsum .op.off{opacity:.5}
+.fsum .fs-window{margin-top:6px;font-size:13px;color:#ffd58a;line-height:1.5;font-weight:600}
+body.lang-zh .fsum .fs-window{font-size:14px}
 #pmatrix{margin:10px 16px;border:1px solid var(--line);border-radius:14px;padding:12px 14px;background:var(--panel)}
 #pmatrix .pm-title{font-size:13px;font-weight:800;color:var(--ink);margin-bottom:4px}
 #pmatrix .pm-sub{font-size:11.5px;color:var(--faint);margin-bottom:8px}
@@ -406,7 +421,7 @@ footer{text-align:center;font-size:11px;color:var(--faint);padding:20px 16px 8px
   </div>
 </div>
 <div class="chartwrap hidden" id="chartwrap">
-  <svg id="chart" viewBox="0 0 500 560" preserveAspectRatio="xMidYMid meet"></svg>
+  <svg id="chart" viewBox="0 0 540 560" preserveAspectRatio="xMidYMid meet"></svg>
   <button class="expand-btn snap-btn" id="snapBtn" title="Share chart image">📷</button>
   <button class="expand-btn" id="expandBtn" title="Enlarge">⤢</button>
 </div>
@@ -416,7 +431,7 @@ footer{text-align:center;font-size:11px;color:var(--faint);padding:20px 16px 8px
   <div class="chartfs-bar"><span id="fsTitle">Sounding</span><button class="fs-close" id="fsClose" title="Close" aria-label="Close">✕</button></div>
   <div id="crossTipBig" class="crosstip crosstip-fs"></div>
   <div class="chartfs-body">
-    <svg id="chartBig" viewBox="0 0 500 560" preserveAspectRatio="xMidYMid meet"></svg>
+    <svg id="chartBig" viewBox="0 0 540 560" preserveAspectRatio="xMidYMid meet"></svg>
   </div>
   <div class="fs-timebar">
     <div class="fs-parcelwrap"><select id="cmpSelFs" class="fs-cmpsel"></select><div class="seg" id="parcelSegFs">
@@ -513,7 +528,7 @@ const MODELS=[
 /* ================= radiosonde overlay (observed balloon vs forecast) =================
    SONDE_WORKER: paste your deployed Cloudflare Worker URL here (see sonde-worker.js).
    Leave empty to disable — the button will show a setup hint instead of failing silently. */
-const APP_BUILD="v50";   // bump together with sw.js CACHE_VERSION on every deploy
+const APP_BUILD="v55";   // bump together with sw.js CACHE_VERSION on every deploy
 const SONDE_WORKER="https://sonde-worker.standphoto.workers.dev";
 const SONDE_STATIONS=[
   {id:"48601",name:"Penang 槟城",lat:5.30,lon:100.27},
@@ -549,10 +564,12 @@ function updateSondeUI(){
   if(SONDE_ON&&SONDE){
     const age=Math.round((Date.now()-new Date(SONDE.time).getTime())/3600e3);
     const cyc=new Date(SONDE.time).getUTCHours();
-    const stale=age>13;
+    // radiosondes launch only at 00Z & 12Z, so an age up to ~13h between cycles is normal —
+    // frame it as cadence, not staleness. Only warn if a launch was genuinely missed (>26h).
+    const reallyOld=age>26;
     sondeInfoMsg(`🎈 ${SONDE.stName} ${SONDE.station} · ${String(cyc).padStart(2,"0")}Z · `+
-      L(`${age}小时前${stale?"（已较旧）":""}`,`${age}h ago${stale?" (getting old)":""}`)+
-      ` · ${SONDE.km} km`, stale);
+      L(`${age}小时前${reallyOld?"（可能缺班）":""} · 每日两次施放`,`${age}h ago${reallyOld?" (launch may be delayed)":""} · launches twice daily`)+
+      ` · ${SONDE.km} km`, reallyOld);
   } else if(!SONDE_ON){ sondeInfoMsg(""); }
 }
 async function toggleSonde(){
@@ -691,6 +708,26 @@ function wireAcc(rootId){
     d.ontoggle=()=>{ ACC[d.dataset.acc]=d.open?1:0; accSave(); };
   });
 }
+/* reusable collapsible section: chevron header + body, state persisted in ACC.
+   key must be stable across languages (don't use the translated title). defOpen defaults true. */
+function collapsibleSection(key,title,bodyHTML,defOpen){
+  const open=accOpen(key, defOpen===undefined?true:defOpen);
+  return `<button class="csec-head${open?"":" collapsed"}" data-csec="${key}"><span class="csec-car">▾</span><span class="csec-t">${title}</span></button>`+
+         `<div class="csec-body${open?"":" collapsed"}" data-csec-body="${key}">${bodyHTML}</div>`;
+}
+/* wire every collapsible header found anywhere in the document (idempotent per render) */
+function wireCollapsibles(){
+  document.querySelectorAll(".csec-head[data-csec]").forEach(h=>{
+    h.onclick=()=>{
+      const key=h.dataset.csec;
+      const body=document.querySelector(`[data-csec-body="${key}"]`);
+      const nowOpen=h.classList.contains("collapsed");   // about to open
+      h.classList.toggle("collapsed",!nowOpen);
+      if(body)body.classList.toggle("collapsed",!nowOpen);
+      ACC[key]=nowOpen?1:0; accSave();
+    };
+  });
+}
 function buildExplain(){
   return `<div class="sect">${L("入门 — 雷暴三要素","Start here — the 3 storm ingredients")}</div>
   <details data-acc="exp-recipe"${accOpen("exp-recipe",true)?" open":""}><summary>${L("配方：水汽 + 不稳定 + 触发","The recipe: moisture + instability + a trigger")}</summary>
@@ -763,14 +800,14 @@ function buildGuide(){
     `<b>24小时风险条</b>是小时格上方的彩色细条：暗色=平静，绿色=潮湿/毛毛雨，琥珀=可能有风暴，红色=要素齐备。它用与“会下雨/雷暴吗”面板相同的评分，让你一眼看出该担心哪个时段 — 点击任一格即可跳到该小时。<br><br><b>📤 分享</b>按钮把当前地点、时刻、结论、CAPE/CIN/可降水量与所用模式打包成简讯，一键发送到 WhatsApp。<br><br>应用会<b>记住上次查看的地点</b>并在下次打开时自动载入。`,
     `The <b>24-hour risk strip</b> is the thin coloured bar above the hour tiles: dim = quiet, green = moist/drizzle, amber = storms possible, red = ingredients in place. It uses the same scoring as the "Is a storm coming?" panel so you can see at a glance which hour to worry about — tap any segment to jump to that hour.<br><br>The <b>📤 share</b> button packages the location, hour, verdict, CAPE/CIN/PW and the model in use into a short message and opens WhatsApp.<br><br>The app <b>remembers the last location</b> you viewed and auto-loads it next time you open it.`)
   +D(L("实测探空叠加（气球观测）","Observed sounding overlay (radiosonde)"),
-    `<b>探空气球（radiosonde）</b>是气象局每天施放的真实观测：气球携带传感器升空，逐层实测温度、湿度与风 — 它是大气廓线的“地面真相”。应用会<b>默认</b>把<b>最近站点的最新实测</b>以灰白虚线叠加到预报曲线上（点🎈可隐藏，选择会被记住）：两组曲线贴近说明模式可信；实测更湿、更暖或逆温位置不同，就是模式的偏差 — 这正是 RainScore Lab 思想应用到整个大气柱。<br><br>注意：马来西亚的施放站点有限（雪邦、槟城、哥打峇鲁及东马数站），距离果园可能上百公里，且每天仅00Z/12Z施放 — 界面会显示站点、施放时间与<b>数据年龄</b>；超过约13小时会提示已较旧。`,
-    `A <b>radiosonde</b> is the real thing: a weather-service balloon carrying sensors that measure temperature, humidity and wind layer by layer as it rises — the ground truth for the atmospheric profile. The app overlays the <b>latest launch from the nearest station</b> as grey/white dashed curves on top of the forecast <b>by default</b> (tap 🎈 to hide — your choice is remembered): curves hugging each other means the model is trustworthy; the observation being moister, warmer, or placing an inversion elsewhere is the model's bias — RainScore Lab thinking applied to the whole column.<br><br>Note: Malaysia's launch network is sparse (Sepang, Penang, Kota Bharu and a few East Malaysia sites), possibly 100+ km from your orchard, launching only at 00Z/12Z — the app shows the station, launch time and <b>data age</b>, and warns past ~13 hours.`)
+    `<b>探空气球（radiosonde）</b>是气象局每天施放的真实观测：气球携带传感器升空，逐层实测温度、湿度与风 — 它是大气廓线的“地面真相”。应用会<b>默认</b>把<b>最近站点的最新实测</b>以灰白虚线叠加到预报曲线上（点🎈可隐藏，选择会被记住）：两组曲线贴近说明模式可信；实测更湿、更暖或逆温位置不同，就是模式的偏差 — 这正是 RainScore Lab 思想应用到整个大气柱。<br><br>注意：马来西亚的施放站点有限（雪邦、槟城、哥打峇鲁及东马数站），距离果园可能上百公里，且每天仅00Z/12Z施放两次 — 界面会显示站点、施放时间与<b>数据年龄</b>，并标明「每日两次施放」；两次之间自然会有十来个小时的间隔，属正常节奏，只有明显缺班（超过约26小时）才会提示。`,
+    `A <b>radiosonde</b> is the real thing: a weather-service balloon carrying sensors that measure temperature, humidity and wind layer by layer as it rises — the ground truth for the atmospheric profile. The app overlays the <b>latest launch from the nearest station</b> as grey/white dashed curves on top of the forecast <b>by default</b> (tap 🎈 to hide — your choice is remembered): curves hugging each other means the model is trustworthy; the observation being moister, warmer, or placing an inversion elsewhere is the model's bias — RainScore Lab thinking applied to the whole column.<br><br>Note: Malaysia's launch network is sparse (Sepang, Penang, Kota Bharu and a few East Malaysia sites), possibly 100+ km from your orchard, launching only twice a day at 00Z/12Z — the app shows the station, launch time and <b>data age</b>, labelled "launches twice daily". A gap of a dozen-odd hours between launches is the normal cadence, not stale data; only a genuinely missed launch (past ~26 h) is flagged.`)
   +D(L("气块选择、DCAPE 与新图层","Parcels, DCAPE & the new layers"),
     `<b>抬升气块（SB/ML/MU）：</b>图上方的选择器决定沿虚线抬升的是哪种气块。<b>SB 地面</b>＝地面空气（午后经典）；<b>ML 混合层</b>＝最底层100 hPa的平均（更能代表整层受热）；<b>MU 最不稳定</b>＝低层300 hPa内θe最高的那层 — <b>清晨逆温压住地面时，燃料常藏在逆温之上</b>，此时SB CAPE很小而MU CAPE很大。「CAPE 三气块」卡片一眼对比三者；「会下雨吗」面板的燃料用MU判断、盖子用SB判断，因此清晨不再低估午后风险。<br><br><b>DCAPE 下沉能量：</b>雨水在中层干空气中蒸发降温，冷空气砸向地面形成<b>下击暴流</b> — 会扫落果实、折断枝条。DCAPE越大风越猛：&lt;400弱，400–800中等，800–1200强，&gt;1200极强。<br><br><b>新图层：</b>青色细线＝<b>湿球温度</b>；右侧蓝色竖条＝<b>湿度/云层带</b>（越蓝越接近饱和）；「对比」下拉可叠加<b>第二个模式</b>（紫色曲线）直接看分歧；<b>时间-高度湿度图</b>把24小时的水汽结构铺成一张图，点任一列即可跳到该小时；📷按钮把当前探空图<b>生成图片分享</b>到 WhatsApp。`,
     `<b>Lifted parcels (SB/ML/MU):</b> the selector above the chart chooses which parcel rises along the dashed line. <b>SB Surface</b> = ground air (classic afternoon); <b>ML Mixed-layer</b> = average of the lowest 100 hPa (represents whole-layer heating); <b>MU Most-unstable</b> = the highest-θe level in the lowest 300 hPa — <b>on mornings when an inversion pins the surface, the fuel often hides above it</b>, so SB CAPE reads tiny while MU CAPE is large. The "CAPE 3 parcels" card compares all three at a glance; the storm panel judges fuel with MU and the cap with SB, so mornings no longer understate the afternoon threat.<br><br><b>DCAPE, downdraft energy:</b> rain evaporating into dry mid-level air chills it, and that cold air crashes to the ground as a <b>downburst</b> — the wind that strips fruit and snaps branches. Bigger DCAPE = harder crash: &lt;400 weak, 400–800 moderate, 800–1200 strong, &gt;1200 extreme.<br><br><b>New layers:</b> the thin cyan line is the <b>wet-bulb temperature</b>; the blue strip on the right edge is the <b>humidity/cloud bar</b> (bluer = closer to saturation); the <b>Compare</b> dropdown overlays a <b>second model</b> (violet curves) to see disagreement directly; the <b>time-height humidity panel</b> lays the whole day's moisture structure out in one picture — tap a column to jump to that hour; and the 📷 button renders the current sounding as an <b>image to share</b> on WhatsApp.`)
   +D(L("气块矩阵与降雨概率","The parcel matrix & rain probability"),
-    `<b>气块矩阵</b>把 SB/ML/MU 三个 CAPE 的<b>分歧模式</b>翻译成五种作业场景（隐藏燃料／全层蓄能／需午后加热／边缘／确实稳定），当前小时所属的一行会高亮 — 拖动小时条可以看到白天如何从「隐藏燃料」演变为「全层蓄能」。判断阈值：约800 J/kg以上算充足燃料，300以下算安静。<br><br><b>降雨概率</b>（风险条下方的蓝色小柱与头条的百分比）来自<b>模式集合（ensemble）</b>：同一模式用微扰初值跑多次，出现≥0.1毫米降雨的成员比例即为概率 — 这是比单一确定值更诚实的说法。注意：并非所有模式都提供概率；没有时该条会隐藏、头条不显示百分比，绝不编造。<br><br><b>集合降雨投影（扇形图）</b>更进一步：同一模式的<b>51个成员</b>各自给出每小时雨量，浅蓝阴影是成员的10–90%范围，深带是25–75%，亮线是中位数 — 扇形<b>越窄</b>成员越一致，预报越可信；<b>越宽</b>说明大气处于难料状态，一切计划都该留余量。点图任意处可跳到该小时。下方三个<b>分级概率</b>直接对应农事：≥1mm＝药液可能被冲（喷药风险）、≥5mm＝晒果/干燥中断、≥10mm＝收果运输受阻。右上角的一致性标签（高一致/中等/分歧大）是全天10–90%平均宽度的总结。<br><br>看不完这么多数据？顶部绿框的<b>〈农户小结〉</b>把矩阵、风险时段与集合概率压缩成一两句话和三盏作业灯（喷药／晒果／收果）— 先看它，再决定要不要深入。`,
-    `The <b>parcel matrix</b> translates the <b>disagreement pattern</b> among the three CAPEs (SB/ML/MU) into five operational scenarios (hidden fuel / loaded everywhere / needs afternoon heating / marginal / genuinely stable). The current hour's row is highlighted — scrub the hours to watch a day evolve from "hidden fuel" into "loaded everywhere". Thresholds: ≥~800 J/kg counts as ample fuel, <300 as quiet.<br><br>The <b>rain probability</b> (small blue bars under the risk strip, and the percentage in the headline) comes from the <b>model ensemble</b>: the same model run many times with tiny perturbations, and the probability is the share of members producing ≥0.1 mm — an honest statement compared with a single deterministic number. Note: not every model provides it; when absent the strip hides and no percentage is shown — never invented.<br><br>The <b>ensemble rain projection (fan chart)</b> goes further: <b>51 members</b> of the same model each produce an hourly rainfall; the light-blue shade spans the members' 10–90% range, the darker band 25–75%, the bright line the median. A <b>narrow</b> fan means the members agree — trust the forecast; a <b>wide</b> fan means the atmosphere is in a hard-to-pin state — leave margin in every plan. Tap anywhere on the chart to jump to that hour. The three <b>tiered probabilities</b> below map straight to farm work: ≥1 mm = spray may wash off, ≥5 mm = drying disrupted, ≥10 mm = harvest logistics at risk. The agreement badge (high/moderate/low) summarizes the day's average 10–90% width.<br><br>Too much to digest? The green <b>Farmer's bottom line</b> box at the top compresses the matrix, risk timing and ensemble probabilities into a sentence or two plus three work lights (spray / dry / harvest) — read that first, then dig deeper if needed.`)
+    `<b>气块矩阵</b>把 SB/ML/MU 三个 CAPE 的<b>分歧模式</b>翻译成五种作业场景（隐藏燃料／全层蓄能／需午后加热／边缘／确实稳定），当前小时所属的一行会高亮 — 拖动小时条可以看到白天如何从「隐藏燃料」演变为「全层蓄能」。判断阈值：约800 J/kg以上算充足燃料，300以下算安静。<br><br><b>降雨概率</b>（风险条下方的蓝色小柱与头条的百分比）来自<b>模式集合（ensemble）</b>：同一模式用微扰初值跑多次，出现≥0.1毫米降雨的成员比例即为概率 — 这是比单一确定值更诚实的说法。注意：并非所有模式都提供概率；没有时该条会隐藏、头条不显示百分比，绝不编造。<br><br><b>集合降雨投影（扇形图）</b>更进一步：同一模式的<b>51个成员</b>各自给出每小时雨量，浅蓝阴影是成员的10–90%范围，深带是25–75%，亮线是中位数 — 扇形<b>越窄</b>成员越一致，预报越可信；<b>越宽</b>说明大气处于难料状态，一切计划都该留余量。点图任意处可跳到该小时。下方三个<b>分级概率</b>直接对应农事：≥1mm＝药液可能被冲（喷药风险）、≥5mm＝晒果/干燥中断、≥10mm＝收果运输受阻。右上角的一致性标签（高一致/中等/分歧大）是全天10–90%平均宽度的总结。<br><br>看不完这么多数据？顶部绿框的<b>〈农户小结〉</b>把矩阵、风险时段与集合概率压缩成一两句话，加上四盏贴合榴莲农事的作业灯：<b>喷药/叶面肥</b>与<b>晾晒</b>需要干燥（尤其干燥的早晨）窗口；<b>播种/施肥</b>正相反 — 有像样的雨水把它冲进土里才最理想，所以下雨概率高时才亮，太干时变暗；<b>运输/收果</b>是提醒灯，遇湿、雷暴或下击暴流日会警示。当好雨将至，小结还会提示可暂停灌溉。先看这盏灯，再决定要不要深入。`,
+    `The <b>parcel matrix</b> translates the <b>disagreement pattern</b> among the three CAPEs (SB/ML/MU) into five operational scenarios (hidden fuel / loaded everywhere / needs afternoon heating / marginal / genuinely stable). The current hour's row is highlighted — scrub the hours to watch a day evolve from "hidden fuel" into "loaded everywhere". Thresholds: ≥~800 J/kg counts as ample fuel, <300 as quiet.<br><br>The <b>rain probability</b> (small blue bars under the risk strip, and the percentage in the headline) comes from the <b>model ensemble</b>: the same model run many times with tiny perturbations, and the probability is the share of members producing ≥0.1 mm — an honest statement compared with a single deterministic number. Note: not every model provides it; when absent the strip hides and no percentage is shown — never invented.<br><br>The <b>ensemble rain projection (fan chart)</b> goes further: <b>51 members</b> of the same model each produce an hourly rainfall; the light-blue shade spans the members' 10–90% range, the darker band 25–75%, the bright line the median. A <b>narrow</b> fan means the members agree — trust the forecast; a <b>wide</b> fan means the atmosphere is in a hard-to-pin state — leave margin in every plan. Tap anywhere on the chart to jump to that hour. The three <b>tiered probabilities</b> below map straight to farm work: ≥1 mm = spray may wash off, ≥5 mm = drying disrupted, ≥10 mm = harvest logistics at risk. The agreement badge (high/moderate/low) summarizes the day's average 10–90% width.<br><br>Too much to digest? The green <b>Farmer's bottom line</b> box at the top compresses the matrix, risk timing and ensemble probabilities into a sentence or two plus four work lights mapped to real durian-farm decisions: <b>Spray / foliar</b> and <b>Sun-drying</b> want a dry (especially dry-morning) window; <b>Seed / fertilize</b> is the opposite — it lights up when a useful soaking is likely, since rain waters it in, and dims when the day is too dry to bother; <b>Transport / harvest</b> is a caution that flags wet, stormy or downburst days. When good rain is coming the summary also suggests pausing irrigation. Read that box first, then dig deeper if needed.`)
   +D(L("数据与计算精度","Data & computation accuracy"),
     `为保证可信，本应用的热力学全部在设备端按标准方法计算：饱和水汽压与LCL用 <b>Bolton (1980)</b> 公式；抬升气块沿守恒<b>相当位温 θe</b>（气块携带的总热量指标，含凝结潜热）的精确伪绝热线；CAPE/CIN 采用<b>虚温</b> — 含水汽的空气更轻，虚温就是把这一效应折算进温度。高度优先取<b>模式位势高度</b>（模式自算的各气压层海拔，减去地形高程得到离地高度 — 对金马仑等高原果园尤为重要），缺失时按温度廓线做流体静力学积分。数据缺失时显示“—”或明确提示，绝不静默编造 — 宁可大声失败，不给假数据。`,
     `For trust, all thermodynamics run on-device with standard methods: saturation vapour pressure and LCL from <b>Bolton (1980)</b>; the lifted parcel follows the exact pseudoadiabat conserving <b>equivalent potential temperature θe</b> (the total-heat tag a parcel carries, latent heat included); CAPE/CIN use <b>virtual temperature</b> — moist air is lighter, and Tv folds that into the temperature. Heights prefer the <b>model's geopotential heights</b> (its own altitude of each pressure level, minus terrain elevation for height above ground — important for highland farms like Cameron), falling back to hydrostatic integration of the temperature profile. Missing data shows "—" or an explicit notice, never a silent guess — loud failure over fake numbers.`)
@@ -1141,6 +1178,13 @@ function renderFarmerSummary(){
     if(firstHi===null&&lv>=2)firstHi=i;
   }
   const at=(i)=>fmtHour(h.time[i]);
+  // first hour today with a meaningful chance of rain (ensemble ≥1mm ≥40%, else risk strip ≥2)
+  let firstRainI=null;
+  for(let i=HR_START;i<=HR_END;i++){
+    const st=(typeof ENS!=="undefined"&&ENS&&ENS.stats)?ENS.stats[i]:null;
+    const wet=(st&&st.t1>=40) || (RISK_LEVELS[i]??0)>=2;
+    if(wet){ firstRainI=i; break; }
+  }
   const cls=classifyParcels(A0);
   // sentence 1: what kind of day + when
   const what={
@@ -1164,28 +1208,55 @@ function renderFarmerSummary(){
       :ENS.confCls==="lo"?L("但成员分歧大 — 计划请留后备方案。","But members disagree widely — keep a fallback plan.")
       :L("成员一致度中等。","Member agreement is moderate.");
     ensLine=(maxT5>=15&&maxAt!=null?L(`≥5mm 的概率最高约 ${maxT5}%（${at(maxAt)} 前后）。`,`Chance of ≥5 mm peaks near ${maxT5}% around ${at(maxAt)}. `):"")+confBit;
+    // irrigation cue: if a useful soaking looks likely, suggest holding back watering
+    if(maxT5>=40) ensLine+=L(" 雨水够用，可暂停灌溉。"," Rain should be enough — you can pause irrigation.");
+  }
+  // spray window: name the dry window and when rain most likely starts — farmers judge for themselves
+  let windowLine="";
+  if(firstRainI!=null && firstRainI>HR_START+2){
+    windowLine=L(`🌂 大约 ${at(firstRainI)} 前干爽 — 要喷药/叶面肥就趁早、赶在雨前喷完晾干。`,
+                 `🌂 Dry until about ${at(firstRainI)} — if spraying, do it early and let it dry before the rain.`);
+  } else if(firstRainI!=null){
+    windowLine=L(`🌂 雨可能一早（约 ${at(firstRainI)}）就来 — 喷药窗口很窄，务必看准短暂的干爽时段。`,
+                 `🌂 Rain may come early (around ${at(firstRainI)}) — the spray window is narrow; watch for a brief dry break.`);
   }
   // three work lights
-  const sprayEndI=Math.min(HR_END,HR_START+11);   // spraying happens before ~11:00
+  // --- work lights mapped to how durian farmers actually decide ---
+  // Some jobs want a DRY window (spray, sun-drying); others are BETTER before rain
+  // (seeding/fertilizer — rain waters it in); transport/harvest is a caution on wet days.
+  const sprayEndI=Math.min(HR_END,HR_START+11);   // spray & sun-out happen in the morning
   let mornBad=false; for(let i=HR_START;i<=sprayEndI;i++) if((RISK_LEVELS[i]??0)>=2) mornBad=true;
-  let mornT1=0, dayT5=0, dayT10=0;
+  let mornT1=0, dayT1=0, dayT5=0, dayT10=0;
   if(typeof ENS!=="undefined"&&ENS&&ENS.stats){
     for(let i=HR_START;i<=HR_END;i++){const st=ENS.stats[i];if(!st)continue;
       if(i<=sprayEndI)mornT1=Math.max(mornT1,st.t1);
-      dayT5=Math.max(dayT5,st.t5); dayT10=Math.max(dayT10,st.t10);}
+      dayT1=Math.max(dayT1,st.t1); dayT5=Math.max(dayT5,st.t5); dayT10=Math.max(dayT10,st.t10);}
   }
   const light=(bad,warn)=>bad?"bad":warn?"warn":"ok";
   const mark=(c)=>c==="ok"?"✓":c==="warn"?"⚠":"✗";
-  const spray=light(mornBad||mornT1>=60, mornT1>=30);
-  const dry  =light(worst>=3||dayT5>=60, worst>=2||dayT5>=30);
-  const harv =light(dayT10>=40, dayT10>=15||worst>=3);
+  // DRY-window jobs: green when the morning stays dry, red when it won't
+  // spray: we give the window and trust the farmer's judgment — so this is informational, not a veto.
+  // green when there's a usable dry window (rain not until after the early hours); amber if rain comes early.
+  const sprayWindowOK = (firstRainI==null) || (firstRainI>HR_START+2);
+  const spray = sprayWindowOK ? "ok" : "warn";       // chemical / foliar spray
+  const sundry=light(dayT5>=50||worst>=3, dayT1>=40||worst>=2); // laundry / produce sunbathing
+  // RAIN-positive job: seeding & fertilizer are BEST just before decent rain waters them in.
+  // green when useful rain is likely (and not a destructive storm), grey when the day is bone-dry.
+  const seedFert = (dayT10>=40)?"warn"                           // heavy storm — hold off, wash-out risk
+                 : (dayT5>=30||dayT1>=50)?"ok"                   // good soaking coming — ideal to apply
+                 : "off";                                        // too dry to bother / no benefit
+  // MOVEMENT job: harvest & transport — caution on wet, stormy, or downburst days
+  const move=light(worst>=3||dayT10>=30, worst>=2||dayT5>=40);
+  const markSeed=(c)=>c==="ok"?"✓":c==="warn"?"⚠":"·";
   const ops=[
-    [spray,L("早晨喷药","Morning spray")],
-    [dry,  L("晒果/干燥","Drying")],
-    [harv, L("收果运输","Harvest & transport")],
-  ].map(([c,t])=>`<div class="op ${c}"><b>${mark(c)}</b>${t}</div>`).join("");
+    [spray, mark(spray),  L("喷药/叶面肥","Spray / foliar")],
+    [sundry,mark(sundry), L("晾晒","Sun-drying")],
+    [seedFert==="off"?"":seedFert, markSeed(seedFert), L("播种/施肥","Seed / fertilize")],
+    [move,  mark(move),   L("运输/收果","Transport / harvest")],
+  ].map(([c,m,t])=>`<div class="op ${c}"><b>${m}</b>${t}</div>`).join("");
   el.innerHTML=`<div class="fs-h">${L("农户小结 · 看这里就够","FARMER'S BOTTOM LINE")}</div>
     <div class="fs-line">${what}${ensLine?` ${ensLine}`:""}</div>
+    ${windowLine?`<div class="fs-line fs-window">${windowLine}</div>`:""}
     <div class="fs-ops">${ops}</div>`;
 }
 /* ---- parcel-pattern matrix: classify the SB/ML/MU disagreement into an operational scenario ---- */
@@ -1216,9 +1287,11 @@ function renderParcelMatrix(A){
   const el=document.getElementById("pmatrix"); if(!el||!A)return;
   const act=classifyParcels(A);
   const f0=(x)=>x!=null&&isFinite(x)?Math.round(x):"—";
-  el.innerHTML=`<div class="pm-title">${L("气块矩阵 · 今天属于哪种天？","Parcel matrix · what kind of day is this?")}</div>
-    <div class="pm-sub">SB ${f0(A.capeSB)} · ML ${f0(A.capeML)} · MU ${f0(A.capeMU)} J/kg</div>`+
-    parcelMatrixRows().map(r=>`<div class="pm-row${r.k===act?" on":""}"><div class="pm-ic">${r.ic}</div><div><div class="pm-t">${r.t}</div><div class="pm-d">${r.d}</div></div></div>`).join("");
+  el.innerHTML=collapsibleSection("sec-matrix", L("气块矩阵 · 今天属于哪种天？","Parcel matrix · what kind of day is this?"),
+    `<div class="pm-sub">SB ${f0(A.capeSB)} · ML ${f0(A.capeML)} · MU ${f0(A.capeMU)} J/kg</div>`+
+    parcelMatrixRows().map(r=>`<div class="pm-row${r.k===act?" on":""}"><div class="pm-ic">${r.ic}</div><div><div class="pm-t">${r.t}</div><div class="pm-d">${r.d}</div></div></div>`).join(""),
+    true);
+  wireCollapsibles();
 }
 let PARCEL_SEL=(function(){ try{const v=localStorage.getItem("skewt.parcel.v1"); return ["sb","ml","mu"].includes(v)?v:"sb";}catch(e){return "sb";} })();
 function analyze(P){
@@ -1547,14 +1620,15 @@ function draw(P,A,svgEl){
   const Ppts=path.filter(p=>p.T>Tmin-80).map(p=>[xOf(p.T,p.p),yOf(p.p)]);
   g0.appendChild(poly(Ppts,"var(--parcel)",1.8,"5 4"));
 
-  // wind barbs on right
-  const bx=X1+18;
+  // wind barbs on a fixed vertical staff in the right gutter (standard sounding convention):
+  // the staff always points the same way; the whole barb rotates to show wind direction,
+  // but they're spaced so feathers never collide, and kept inside the widened viewBox.
+  const bx=X1+30;                       // staff column, well right of the cloud bar (X1+2..8)
   let lastBarbY=-1e9;
   prof.forEach(l=>{
     if(l.ws==null)return;
-    // keep barbs inside the plot; nudge the surface barb (at the very bottom edge) up a touch
-    const y=Math.min(Y1-10, Math.max(Y0+10, yOf(l.p)));
-    if(Math.abs(y-lastBarbY)<13) return;   // anti-collision at dense low levels
+    const y=Math.min(Y1-14, Math.max(Y0+14, yOf(l.p)));
+    if(Math.abs(y-lastBarbY)<16) return;   // ≥16px apart: feathers (≤~14px) can't overlap
     lastBarbY=y;
     windBarb(g0,bx,y,l.ws,l.wd);
   });
@@ -1729,7 +1803,7 @@ function attachCrosshair(svg){
   if(svg.dataset.crossBound) return; svg.dataset.crossBound="1";
   const toVB=(clientX,clientY)=>{
     const rect=svg.getBoundingClientRect();
-    return { x:(clientX-rect.left)/rect.width*500, y:(clientY-rect.top)/rect.height*560 };
+    return { x:(clientX-rect.left)/rect.width*540, y:(clientY-rect.top)/rect.height*560 };
   };
   const setPos=(clientX,clientY)=>{
     const {x,y}=toVB(clientX,clientY);
@@ -1751,28 +1825,31 @@ function attachCrosshair(svg){
 }
 
 function windBarb(g,x,y,spd,dir){
-  // knots
+  // knots (barbs are a global aviation standard drawn in knots)
   const kt=spd*0.539957;
-  const ang=(dir+180)*Math.PI/180; // wind FROM dir
+  const ang=(dir+180)*Math.PI/180;      // wind FROM dir
   const dx=Math.sin(ang), dy=-Math.cos(ang);
-  const L=22;
+  const L=16;                           // shorter staff so the whole barb stays in the gutter
   const ex=x+dx*L, ey=y+dy*L;
   g.appendChild(line(x,y,ex,ey,"var(--wind)",1.1));
   let rem=Math.round(kt/5)*5;
-  const step=4.2, bl=8;
+  const step=3.6, bl=7;                  // feather spacing & length (compact, non-overlapping)
   const perpx=-dy,perpy=dx;
-  // draw flags/barbs from outer end inward
   let cx=ex, cy=ey;
-  while(rem>=50){
-    g.appendChild(el("polygon",{points:`${cx},${cy} ${cx+perpx*bl+dx*(-step)},${cy+perpy*bl+dy*(-step)} ${cx+dx*(-step)},${cy+dy*(-step)}`,fill:"var(--wind)"}));
-    cx+=dx*(-step*1.4);cy+=dy*(-step*1.4);rem-=50;
+  while(rem>=50){                        // pennant (triangle) = 50 kt
+    g.appendChild(el("polygon",{points:`${cx.toFixed(1)},${cy.toFixed(1)} ${(cx+perpx*bl+dx*(-step)).toFixed(1)},${(cy+perpy*bl+dy*(-step)).toFixed(1)} ${(cx+dx*(-step)).toFixed(1)},${(cy+dy*(-step)).toFixed(1)}`,fill:"var(--wind)"}));
+    cx+=dx*(-step*1.3);cy+=dy*(-step*1.3);rem-=50;
   }
-  while(rem>=10){
+  while(rem>=10){                        // full feather = 10 kt
     g.appendChild(line(cx,cy,cx+perpx*bl+dx*(-step),cy+perpy*bl+dy*(-step),"var(--wind)",1.1));
     cx+=dx*(-step);cy+=dy*(-step);rem-=10;
   }
-  if(rem>=5){
+  if(rem>=5){                            // half feather = 5 kt
     g.appendChild(line(cx,cy,cx+perpx*(bl*0.55)+dx*(-step*0.55),cy+perpy*(bl*0.55)+dy*(-step*0.55),"var(--wind)",1.1));
+  }
+  // calm marker: open circle when essentially no wind
+  if(Math.round(kt/5)*5<5){
+    g.appendChild(el("circle",{cx:x,cy:y,r:2.4,fill:"none",stroke:"var(--wind)","stroke-width":1}));
   }
 }
 
@@ -2082,10 +2159,15 @@ function render(P,A,fc){
       [L("能见度","Visibility"),P.vis!=null?fmt(P.vis/1000,1):"—","km",fogLbl+L("。",".")],
     ]],
   ];
-  document.getElementById("cards").innerHTML=sections.map(([title,cards])=>
-    `<div class="cardsect">${title}</div><div class="cardgrid">`+
-    cards.map(c=>`<div class="card"><div class="k">${c[0]}</div><div class="v">${c[1]}<span class="u"> ${c[2]}</span></div><div class="d">${c[3]}</div></div>`).join("")+
-    `</div>`).join("");
+  const SECT_KEYS=["sec-rain","sec-fuel","sec-levels","sec-wind"];
+  document.getElementById("cards").innerHTML=sections.map(([title,cards],si)=>
+    collapsibleSection(SECT_KEYS[si]||("sec"+si), title,
+      `<div class="cardgrid">`+
+      cards.map(c=>`<div class="card"><div class="k">${c[0]}</div><div class="v">${c[1]}<span class="u"> ${c[2]}</span></div><div class="d">${c[3]}</div></div>`).join("")+
+      `</div>`,
+      true)
+    ).join("");
+  wireCollapsibles();
   drawHodograph(A);
   drawWindProfile(A);
   renderIngredients(P,A);
@@ -2133,14 +2215,15 @@ function renderIngredients(P,A){
 
   const dot=s=>`<span class="idot ${s===2?'yes':s===1?'maybe':'no'}">${s===2?'●':s===1?'◐':'○'}</span>`;
   document.getElementById("ingredients").innerHTML=
-    `<div class="cardsect">${L("会下雨/雷暴吗？","Is a storm coming?")}</div>`+
+    collapsibleSection("sec-storm", L("会下雨/雷暴吗？","Is a storm coming?"),
     `<div class="ingpanel">`+
     `<div class="ingverdict" style="border-color:${vcol}">${verdict}</div>`+
     ing.map(([ic,name,q,score,reason])=>
       `<div class="ingrow"><div class="ingic">${ic}</div><div class="ingbody"><div class="ingname">${name} ${dot(score)}</div><div class="ingq">${q}</div><div class="ingreason">${reason}</div></div></div>`
     ).join("")+
     `<div class="ingfoot">${L("风暴需要<b>水汽 + 不稳定 + 触发</b>三者同时具备。切变决定它是短阵雨还是有组织的持久风暴。拖动上方小时条，观察要素如何汇聚。","A storm needs all three of <b>moisture + instability + a trigger</b> at once. Shear decides whether it's a quick shower or an organized, longer-lived storm. Step through the hours above to watch the ingredients come together.")}</div>`+
-    `</div>`;
+    `</div>`, true);
+  wireCollapsibles();
 }
 
 /* ---------- farm store ---------- */
