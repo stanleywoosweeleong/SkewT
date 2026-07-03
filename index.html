@@ -254,6 +254,16 @@ svg{width:100%;height:auto;display:block;touch-action:manipulation}
 .ens-tiers{display:flex;gap:8px;margin-top:6px;flex-wrap:wrap}
 .ens-tiers span{font-size:11.5px;font-weight:700;color:var(--dim);border:1px solid var(--line);border-radius:999px;padding:3px 10px}
 .ens-tiers span b{color:var(--ink)}
+.fsum{margin:10px 16px;border:1px solid rgba(61,214,140,.4);border-radius:14px;padding:12px 14px;background:rgba(61,214,140,.06)}
+.fsum .fs-h{font-size:12px;font-weight:800;letter-spacing:.06em;color:#3dd68c;margin-bottom:6px}
+.fsum .fs-line{font-size:14px;color:var(--ink);line-height:1.55;font-weight:600}
+body.lang-zh .fsum .fs-line{font-size:15px}
+.fsum .fs-ops{display:flex;gap:8px;margin-top:9px;flex-wrap:wrap}
+.fsum .op{flex:1;min-width:90px;border-radius:10px;padding:7px 9px;font-size:12px;font-weight:700;text-align:center;border:1px solid var(--line);background:var(--panel)}
+.fsum .op b{display:block;font-size:12.5px;margin-bottom:2px}
+.fsum .op.ok{border-color:rgba(61,214,140,.5);color:#7fe0ae}
+.fsum .op.warn{border-color:rgba(255,196,87,.5);color:#ffd58a}
+.fsum .op.bad{border-color:rgba(255,107,107,.5);color:#ff9b9b}
 #pmatrix{margin:10px 16px;border:1px solid var(--line);border-radius:14px;padding:12px 14px;background:var(--panel)}
 #pmatrix .pm-title{font-size:13px;font-weight:800;color:var(--ink);margin-bottom:4px}
 #pmatrix .pm-sub{font-size:11.5px;color:var(--faint);margin-bottom:8px}
@@ -385,6 +395,7 @@ footer{text-align:center;font-size:11px;color:var(--faint);padding:20px 16px 8px
 </div>
 
 <div class="verdict hidden" id="verdict"></div>
+<div class="fsum hidden" id="fsum"></div>
 
 <div id="crossTip" class="crosstip crosstip-inline hidden"></div>
 <div class="parcelrow hidden" id="parcelRow">
@@ -747,8 +758,8 @@ function buildGuide(){
     `<b>抬升气块（SB/ML/MU）：</b>图上方的选择器决定沿虚线抬升的是哪种气块。<b>SB 地面</b>＝地面空气（午后经典）；<b>ML 混合层</b>＝最底层100 hPa的平均（更能代表整层受热）；<b>MU 最不稳定</b>＝低层300 hPa内θe最高的那层 — <b>清晨逆温压住地面时，燃料常藏在逆温之上</b>，此时SB CAPE很小而MU CAPE很大。「CAPE 三气块」卡片一眼对比三者；「会下雨吗」面板的燃料用MU判断、盖子用SB判断，因此清晨不再低估午后风险。<br><br><b>DCAPE 下沉能量：</b>雨水在中层干空气中蒸发降温，冷空气砸向地面形成<b>下击暴流</b> — 会扫落果实、折断枝条。DCAPE越大风越猛：&lt;400弱，400–800中等，800–1200强，&gt;1200极强。<br><br><b>新图层：</b>青色细线＝<b>湿球温度</b>；右侧蓝色竖条＝<b>湿度/云层带</b>（越蓝越接近饱和）；「对比」下拉可叠加<b>第二个模式</b>（紫色曲线）直接看分歧；<b>时间-高度湿度图</b>把24小时的水汽结构铺成一张图，点任一列即可跳到该小时；📷按钮把当前探空图<b>生成图片分享</b>到 WhatsApp。`,
     `<b>Lifted parcels (SB/ML/MU):</b> the selector above the chart chooses which parcel rises along the dashed line. <b>SB Surface</b> = ground air (classic afternoon); <b>ML Mixed-layer</b> = average of the lowest 100 hPa (represents whole-layer heating); <b>MU Most-unstable</b> = the highest-θe level in the lowest 300 hPa — <b>on mornings when an inversion pins the surface, the fuel often hides above it</b>, so SB CAPE reads tiny while MU CAPE is large. The "CAPE 3 parcels" card compares all three at a glance; the storm panel judges fuel with MU and the cap with SB, so mornings no longer understate the afternoon threat.<br><br><b>DCAPE, downdraft energy:</b> rain evaporating into dry mid-level air chills it, and that cold air crashes to the ground as a <b>downburst</b> — the wind that strips fruit and snaps branches. Bigger DCAPE = harder crash: &lt;400 weak, 400–800 moderate, 800–1200 strong, &gt;1200 extreme.<br><br><b>New layers:</b> the thin cyan line is the <b>wet-bulb temperature</b>; the blue strip on the right edge is the <b>humidity/cloud bar</b> (bluer = closer to saturation); the <b>Compare</b> dropdown overlays a <b>second model</b> (violet curves) to see disagreement directly; the <b>time-height humidity panel</b> lays the whole day's moisture structure out in one picture — tap a column to jump to that hour; and the 📷 button renders the current sounding as an <b>image to share</b> on WhatsApp.`)
   +D(L("气块矩阵与降雨概率","The parcel matrix & rain probability"),
-    `<b>气块矩阵</b>把 SB/ML/MU 三个 CAPE 的<b>分歧模式</b>翻译成五种作业场景（隐藏燃料／全层蓄能／需午后加热／边缘／确实稳定），当前小时所属的一行会高亮 — 拖动小时条可以看到白天如何从「隐藏燃料」演变为「全层蓄能」。判断阈值：约800 J/kg以上算充足燃料，300以下算安静。<br><br><b>降雨概率</b>（风险条下方的蓝色小柱与头条的百分比）来自<b>模式集合（ensemble）</b>：同一模式用微扰初值跑多次，出现≥0.1毫米降雨的成员比例即为概率 — 这是比单一确定值更诚实的说法。注意：并非所有模式都提供概率；没有时该条会隐藏、头条不显示百分比，绝不编造。<br><br><b>集合降雨投影（扇形图）</b>更进一步：同一模式的<b>51个成员</b>各自给出每小时雨量，浅蓝阴影是成员的10–90%范围，深带是25–75%，亮线是中位数 — 扇形<b>越窄</b>成员越一致，预报越可信；<b>越宽</b>说明大气处于难料状态，一切计划都该留余量。点图任意处可跳到该小时。下方三个<b>分级概率</b>直接对应农事：≥1mm＝药液可能被冲（喷药风险）、≥5mm＝晒果/干燥中断、≥10mm＝收果运输受阻。右上角的一致性标签（高一致/中等/分歧大）是全天10–90%平均宽度的总结。`,
-    `The <b>parcel matrix</b> translates the <b>disagreement pattern</b> among the three CAPEs (SB/ML/MU) into five operational scenarios (hidden fuel / loaded everywhere / needs afternoon heating / marginal / genuinely stable). The current hour's row is highlighted — scrub the hours to watch a day evolve from "hidden fuel" into "loaded everywhere". Thresholds: ≥~800 J/kg counts as ample fuel, <300 as quiet.<br><br>The <b>rain probability</b> (small blue bars under the risk strip, and the percentage in the headline) comes from the <b>model ensemble</b>: the same model run many times with tiny perturbations, and the probability is the share of members producing ≥0.1 mm — an honest statement compared with a single deterministic number. Note: not every model provides it; when absent the strip hides and no percentage is shown — never invented.<br><br>The <b>ensemble rain projection (fan chart)</b> goes further: <b>51 members</b> of the same model each produce an hourly rainfall; the light-blue shade spans the members' 10–90% range, the darker band 25–75%, the bright line the median. A <b>narrow</b> fan means the members agree — trust the forecast; a <b>wide</b> fan means the atmosphere is in a hard-to-pin state — leave margin in every plan. Tap anywhere on the chart to jump to that hour. The three <b>tiered probabilities</b> below map straight to farm work: ≥1 mm = spray may wash off, ≥5 mm = drying disrupted, ≥10 mm = harvest logistics at risk. The agreement badge (high/moderate/low) summarizes the day's average 10–90% width.`)
+    `<b>气块矩阵</b>把 SB/ML/MU 三个 CAPE 的<b>分歧模式</b>翻译成五种作业场景（隐藏燃料／全层蓄能／需午后加热／边缘／确实稳定），当前小时所属的一行会高亮 — 拖动小时条可以看到白天如何从「隐藏燃料」演变为「全层蓄能」。判断阈值：约800 J/kg以上算充足燃料，300以下算安静。<br><br><b>降雨概率</b>（风险条下方的蓝色小柱与头条的百分比）来自<b>模式集合（ensemble）</b>：同一模式用微扰初值跑多次，出现≥0.1毫米降雨的成员比例即为概率 — 这是比单一确定值更诚实的说法。注意：并非所有模式都提供概率；没有时该条会隐藏、头条不显示百分比，绝不编造。<br><br><b>集合降雨投影（扇形图）</b>更进一步：同一模式的<b>51个成员</b>各自给出每小时雨量，浅蓝阴影是成员的10–90%范围，深带是25–75%，亮线是中位数 — 扇形<b>越窄</b>成员越一致，预报越可信；<b>越宽</b>说明大气处于难料状态，一切计划都该留余量。点图任意处可跳到该小时。下方三个<b>分级概率</b>直接对应农事：≥1mm＝药液可能被冲（喷药风险）、≥5mm＝晒果/干燥中断、≥10mm＝收果运输受阻。右上角的一致性标签（高一致/中等/分歧大）是全天10–90%平均宽度的总结。<br><br>看不完这么多数据？顶部绿框的<b>〈农户小结〉</b>把矩阵、风险时段与集合概率压缩成一两句话和三盏作业灯（喷药／晒果／收果）— 先看它，再决定要不要深入。`,
+    `The <b>parcel matrix</b> translates the <b>disagreement pattern</b> among the three CAPEs (SB/ML/MU) into five operational scenarios (hidden fuel / loaded everywhere / needs afternoon heating / marginal / genuinely stable). The current hour's row is highlighted — scrub the hours to watch a day evolve from "hidden fuel" into "loaded everywhere". Thresholds: ≥~800 J/kg counts as ample fuel, <300 as quiet.<br><br>The <b>rain probability</b> (small blue bars under the risk strip, and the percentage in the headline) comes from the <b>model ensemble</b>: the same model run many times with tiny perturbations, and the probability is the share of members producing ≥0.1 mm — an honest statement compared with a single deterministic number. Note: not every model provides it; when absent the strip hides and no percentage is shown — never invented.<br><br>The <b>ensemble rain projection (fan chart)</b> goes further: <b>51 members</b> of the same model each produce an hourly rainfall; the light-blue shade spans the members' 10–90% range, the darker band 25–75%, the bright line the median. A <b>narrow</b> fan means the members agree — trust the forecast; a <b>wide</b> fan means the atmosphere is in a hard-to-pin state — leave margin in every plan. Tap anywhere on the chart to jump to that hour. The three <b>tiered probabilities</b> below map straight to farm work: ≥1 mm = spray may wash off, ≥5 mm = drying disrupted, ≥10 mm = harvest logistics at risk. The agreement badge (high/moderate/low) summarizes the day's average 10–90% width.<br><br>Too much to digest? The green <b>Farmer's bottom line</b> box at the top compresses the matrix, risk timing and ensemble probabilities into a sentence or two plus three work lights (spray / dry / harvest) — read that first, then dig deeper if needed.`)
   +D(L("数据与计算精度","Data & computation accuracy"),
     `为保证可信，本应用的热力学全部在设备端按标准方法计算：饱和水汽压与LCL用 <b>Bolton (1980)</b> 公式；抬升气块沿守恒<b>相当位温 θe</b>（气块携带的总热量指标，含凝结潜热）的精确伪绝热线；CAPE/CIN 采用<b>虚温</b> — 含水汽的空气更轻，虚温就是把这一效应折算进温度。高度优先取<b>模式位势高度</b>（模式自算的各气压层海拔，减去地形高程得到离地高度 — 对金马仑等高原果园尤为重要），缺失时按温度廓线做流体静力学积分。数据缺失时显示“—”或明确提示，绝不静默编造 — 宁可大声失败，不给假数据。`,
     `For trust, all thermodynamics run on-device with standard methods: saturation vapour pressure and LCL from <b>Bolton (1980)</b>; the lifted parcel follows the exact pseudoadiabat conserving <b>equivalent potential temperature θe</b> (the total-heat tag a parcel carries, latent heat included); CAPE/CIN use <b>virtual temperature</b> — moist air is lighter, and Tv folds that into the temperature. Heights prefer the <b>model's geopotential heights</b> (its own altitude of each pressure level, minus terrain elevation for height above ground — important for highland farms like Cameron), falling back to hydrostatic integration of the temperature profile. Missing data shows "—" or an explicit notice, never a silent guess — loud failure over fake numbers.`)
@@ -1039,6 +1050,8 @@ async function fetchEnsemble(){
     ENS={error:String(e.message||e)};
   }
   renderEnsemble();
+  renderFarmerSummary();
+  if(DATA) showHour(CUR_I);   // verdict/headline/share pick up the fresh ensemble
 }
 function renderEnsemble(){
   const wrap=document.getElementById("enswrap"), svg=document.getElementById("enschart"),
@@ -1100,6 +1113,66 @@ function updateEnsHour(i){
     ? L(`<span>≥1mm <b>${s.t1}%</b></span><span>≥5mm <b>${s.t5}%</b></span><span>≥10mm <b>${s.t10}%</b></span><span>中位 <b>${s.p50.toFixed(1)}</b> mm</span>`,
         `<span>≥1mm <b>${s.t1}%</b></span><span>≥5mm <b>${s.t5}%</b></span><span>≥10mm <b>${s.t10}%</b></span><span>median <b>${s.p50.toFixed(1)}</b> mm</span>`)
     : "";
+}
+/* ---- farmer's bottom line: one plain-language conclusion after all the instruments ---- */
+let RISK_LEVELS={};
+function renderFarmerSummary(){
+  const el=document.getElementById("fsum"); if(!el||!DATA||!LAST_A)return;
+  const h=DATA.hourly;
+  // worst risk ahead + when it starts (from the visible day)
+  let worst=0, firstHi=null;
+  for(let i=HR_START;i<=HR_END;i++){
+    const lv=RISK_LEVELS[i]??0;
+    if(lv>worst)worst=lv;
+    if(firstHi===null&&lv>=2)firstHi=i;
+  }
+  const at=(i)=>fmtHour(h.time[i]);
+  const cls=classifyParcels(LAST_A);
+  // sentence 1: what kind of day + when
+  const what={
+    hidden:  L(`地面看似平静，但上层已蓄能${firstHi!=null?` — 约 ${at(firstHi)} 后风暴风险明显升高`:""}。别被早上的好天骗了。`,
+               `The surface looks calm but fuel is loaded aloft${firstHi!=null?` — storm risk rises clearly after ~${at(firstHi)}`:""}. Don't trust the quiet morning.`),
+    loaded:  L(`全天蓄能充足，${firstHi!=null?`约 ${at(firstHi)} 起`:"随时"}可能起雷暴 — 没有可靠的安全窗口。`,
+               `Loaded all day — storms possible ${firstHi!=null?`from ~${at(firstHi)}`:"anytime"}; no reliable safe window.`),
+    heating: L(`风暴要等太阳加热，${firstHi!=null?`大约 ${at(firstHi)} 前`:"上午"}是可用的作业窗口。`,
+               `Storms wait for heating — ${firstHi!=null?`before ~${at(firstHi)}`:"the morning"} is a usable work window.`),
+    stable:  L(`今天大体安静：连隐藏燃料都查过了，没有。放心安排喷药与晒果。`,
+               `A genuinely quiet day — hidden fuel checked, none found. Plan spraying and drying with confidence.`),
+    mixed:   L(`处于边缘状态${firstHi!=null?`，约 ${at(firstHi)} 后需留意`:""} — 按小时盯着走，别做长承诺。`,
+               `A marginal day${firstHi!=null?` — watch from ~${at(firstHi)}`:""}; follow it hour by hour, avoid long commitments.`),
+  }[cls];
+  // sentence 2: ensemble framing (only when real)
+  let ensLine="";
+  if(typeof ENS!=="undefined"&&ENS&&ENS.stats){
+    let maxT5=0,maxAt=null;
+    for(let i=HR_START;i<=HR_END;i++){const st=ENS.stats[i];if(st&&st.t5>maxT5){maxT5=st.t5;maxAt=i;}}
+    const confBit=ENS.confCls==="hi"?L("模式的51个成员高度一致，这个判断可信度较高。","The 51 members largely agree — this read is trustworthy.")
+      :ENS.confCls==="lo"?L("但成员分歧大 — 计划请留后备方案。","But members disagree widely — keep a fallback plan.")
+      :L("成员一致度中等。","Member agreement is moderate.");
+    ensLine=(maxT5>=15&&maxAt!=null?L(`≥5mm 的概率最高约 ${maxT5}%（${at(maxAt)} 前后）。`,`Chance of ≥5 mm peaks near ${maxT5}% around ${at(maxAt)}. `):"")+confBit;
+  }
+  // three work lights
+  const sprayEndI=Math.min(HR_END,HR_START+11);   // spraying happens before ~11:00
+  let mornBad=false; for(let i=HR_START;i<=sprayEndI;i++) if((RISK_LEVELS[i]??0)>=2) mornBad=true;
+  let mornT1=0, dayT5=0, dayT10=0;
+  if(typeof ENS!=="undefined"&&ENS&&ENS.stats){
+    for(let i=HR_START;i<=HR_END;i++){const st=ENS.stats[i];if(!st)continue;
+      if(i<=sprayEndI)mornT1=Math.max(mornT1,st.t1);
+      dayT5=Math.max(dayT5,st.t5); dayT10=Math.max(dayT10,st.t10);}
+  }
+  const light=(bad,warn)=>bad?"bad":warn?"warn":"ok";
+  const mark=(c)=>c==="ok"?"✓":c==="warn"?"⚠":"✗";
+  const spray=light(mornBad||mornT1>=60, mornT1>=30);
+  const dry  =light(worst>=3||dayT5>=60, worst>=2||dayT5>=30);
+  const harv =light(dayT10>=40, dayT10>=15||worst>=3);
+  const ops=[
+    [spray,L("早晨喷药","Morning spray")],
+    [dry,  L("晒果/干燥","Drying")],
+    [harv, L("收果运输","Harvest & transport")],
+  ].map(([c,t])=>`<div class="op ${c}"><b>${mark(c)}</b>${t}</div>`).join("");
+  el.innerHTML=`<div class="fs-h">${L("农户小结 · 看这里就够","FARMER'S BOTTOM LINE")}</div>
+    <div class="fs-line">${what}${ensLine?` ${ensLine}`:""}</div>
+    <div class="fs-ops">${ops}</div>`;
 }
 /* ---- parcel-pattern matrix: classify the SB/ML/MU disagreement into an operational scenario ---- */
 function classifyParcels(A){
@@ -1942,9 +2015,16 @@ function render(P,A,fc){
     : "";
   document.getElementById("verdict").innerHTML=
     `<div class="h">${L("预报","Forecast")} · ${fc}</div>
-     <div class="big">${rainWord} · ${L(`本小时 ${rain.toFixed(1)} mm`,`${rain.toFixed(1)} mm this hour`)}${P.pop!=null?` · ${Math.round(P.pop)}%`:""} ${pill(lbl,col)}</div>
+     <div class="big">${rainWord} · ${L(`本小时 ${rain.toFixed(1)} mm`,`${rain.toFixed(1)} mm this hour`)}${P.pop!=null?` · ${Math.round(P.pop)}%`:""}${(function(){
+        if(typeof ENS==="undefined"||!ENS||!ENS.stats)return "";
+        const s=ENS.stats[CUR_I]; if(!s)return "";
+        if(s.t10>=15)return ` · ≥10mm ${s.t10}%`;
+        if(s.t5>=15)return ` · ≥5mm ${s.t5}%`;
+        return "";
+      })()} ${pill(lbl,col)}</div>
      <p>${txt2} ${A.cin<-50?L(`盖状逆温（CIN ${Math.round(A.cin)} J/kg）正在压制风暴 — 需先被侵蚀。`,`A capping inversion (${Math.round(A.cin)} J/kg CIN) is currently suppressing storms — it must erode first.`):""}</p>
-     <p style="margin-top:8px">☁️ ${cloudWord(P.cloud)}${L(`（云量${P.cloud!=null?Math.round(P.cloud):"—"}%）`,` (${P.cloud!=null?Math.round(P.cloud):"—"}% sky)`)} · 💨 ${windLine} · 🌫️ ${fogLbl}${L("。",". ")}${fogTxt}</p>`;
+     <p style="margin-top:8px">☁️ ${cloudWord(P.cloud)}${L(`（云量${P.cloud!=null?Math.round(P.cloud):"—"}%）`,` (${P.cloud!=null?Math.round(P.cloud):"—"}% sky)`)} · 💨 ${windLine} · 🌫️ ${fogLbl}${L("。",". ")}${fogTxt}</p>`
+     +((typeof ENS!=="undefined"&&ENS&&ENS.stats)?`<p class="ens-inline"><span class="ens-conf ${ENS.confCls}">${L("集合","ensemble")} ${ENS.confWord}</span>${ENS.confCls==="lo"?L(" — 成员分歧大，一切计划留余量。"," — members disagree; leave margin in every plan."):ENS.confCls==="hi"?L(" — 成员高度一致，可按此计划。"," — members agree; plan on it."):""}</p>`:"");
 
   const fmt=(v,d=0)=>v==null?"—":(typeof v==="number"?v.toFixed(d):v);
   const sections=[
@@ -2213,10 +2293,11 @@ function buildHourStrip(){
   // 24-hour storm-risk strip: one segment per hour tile, same window
   const rs=document.getElementById("riskstrip");
   let dayMaxWs=0, dayMaxHt=0;
+  RISK_LEVELS={};
   if(rs){ rs.innerHTML="";
     for(let i=start;i<start+24 && i<h.time.length;i++){
       let lvl=0;
-      try{ const P=buildProfile(DATA,i); const A=analyze(P); lvl=stormScores(P,A).level;
+      try{ const P=buildProfile(DATA,i); const A=analyze(P); lvl=stormScores(P,A).level; RISK_LEVELS[i]=lvl;
         (A.profWind||[]).forEach(w=>{ if(w.ws!=null&&w.ws>dayMaxWs)dayMaxWs=w.ws; if(w.ht!=null&&w.ht>dayMaxHt)dayMaxHt=w.ht; });
       }catch(e){}
       const seg=document.createElement("div");
@@ -2281,6 +2362,7 @@ function showHour(i){
   const wlb=document.getElementById("windSliderLabel"); if(wlb) wlb.innerHTML=labHtml;
   updateThCursor(i);   // time-height panel cursor follows the hour
   renderParcelMatrix(LAST_A);
+  renderFarmerSummary();
   updateEnsHour(i);
   document.querySelectorAll("#poprow .pb").forEach(b=>b.classList.toggle("on",+b.dataset.i===i));
 }
@@ -2302,7 +2384,7 @@ async function load(lat,lon,label){
     DATA=await getSounding(lat,lon); LATLON=[lat,lon]; LASTLABEL=label||null;
     SONDE=null; SONDE_ON=false; updateSondeUI();   // sonde overlay is per-location: reset on change
     renderLocCaption();
-    ["loc","hours","hoursLabel","riskstrip","verdict","crossTip","parcelRow","chartwrap","legendWrap","cards","ingredients","pmatrix","enswrap","hodowrap","thwrap","explain"].forEach(id=>document.getElementById(id).classList.remove("hidden"));
+    ["loc","hours","hoursLabel","riskstrip","verdict","crossTip","parcelRow","chartwrap","legendWrap","fsum","cards","ingredients","pmatrix","enswrap","hodowrap","thwrap","explain"].forEach(id=>document.getElementById(id).classList.remove("hidden"));
     document.getElementById("err").classList.add("hidden");
     document.getElementById("reloadBtn").classList.remove("hidden");
     document.getElementById("shareBtn").classList.remove("hidden");
@@ -2409,6 +2491,7 @@ document.getElementById("shareBtn").onclick=()=>{
      `*${vPlain}*`,
      ``,
      `降雨：${rainWordOf(rain)} · ${rain.toFixed(1)} mm/h`,
+     ...(typeof ENS!=="undefined"&&ENS&&ENS.stats&&ENS.stats[CUR_I]?[`集合：中位 ${ENS.stats[CUR_I].p50.toFixed(1)} mm · ≥5mm ${ENS.stats[CUR_I].t5}% · ${ENS.confWord}`]:[]),
      `CAPE ${num(A.cape)} J/kg · CIN ${num(A.cin)} J/kg`,
      `可降水量 ${num(A.pw)} mm`,
      `${shearTxt} · 云量 ${num(P.cloud)}%`,
@@ -2421,6 +2504,7 @@ document.getElementById("shareBtn").onclick=()=>{
      `*${vPlain}*`,
      ``,
      `Rain: ${rainWordOf(rain)} · ${rain.toFixed(1)} mm/h`,
+     ...(typeof ENS!=="undefined"&&ENS&&ENS.stats&&ENS.stats[CUR_I]?[`Ensemble: median ${ENS.stats[CUR_I].p50.toFixed(1)} mm · ≥5mm ${ENS.stats[CUR_I].t5}% · ${ENS.confWord}`]:[]),
      `CAPE ${num(A.cape)} J/kg · CIN ${num(A.cin)} J/kg`,
      `PW ${num(A.pw)} mm`,
      `${shearTxt} · cloud ${num(P.cloud)}%`,
