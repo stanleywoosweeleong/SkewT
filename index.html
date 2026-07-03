@@ -325,15 +325,16 @@ body.lang-zh .crosstip .ttinterp{font-size:12.5px}
 .modelhead.collapsed .csec-car{transform:rotate(-90deg)}
 .mh-label{color:var(--faint);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}
 .mh-cur{flex:1;text-align:right;color:var(--accent);font-weight:800;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-/* expanded sheet: full-bleed, edge to edge */
-.modeltiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;width:100vw;position:relative;left:50%;transform:translateX(-50%);padding:4px 10px 8px;box-sizing:border-box}
+/* expanded sheet: near-full-bleed inside the app frame (100vw breakout overflowed on iOS) */
+.modeltiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:4px 8px 8px;padding:0;box-sizing:border-box}
 .modeltiles.hidden{display:none}
-.mtile{padding:18px 6px 15px;border:1.5px solid var(--line);border-radius:16px;background:var(--panel);text-align:center;cursor:pointer;color:var(--dim);-webkit-tap-highlight-color:transparent}
-.mtile b{display:block;font-size:19px;font-weight:800;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.01em}
-.mtile .ms{display:block;font-size:11px;font-weight:600;color:var(--faint);margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mtile{padding:13px 5px 11px;border:1.5px solid var(--line);border-radius:14px;background:var(--panel);text-align:center;cursor:pointer;color:var(--dim);-webkit-tap-highlight-color:transparent;min-width:0}
+.mtile b{display:block;font-size:16.5px;font-weight:800;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.01em}
+.mtile .ms{display:block;font-size:10px;font-weight:600;color:var(--faint);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mtile.on{border-color:var(--accent);background:rgba(255,107,61,.12);box-shadow:0 0 0 1px rgba(255,107,61,.25)}
 .mtile.on b,.mtile.on .ms{color:var(--accent)}
 .mnote-row{padding:0 12px 2px;text-align:right}
+#cmprow{display:block}
 .mnote{flex:0 0 auto;font-size:11px;font-weight:700;color:var(--accent);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .modelrow{flex-wrap:wrap}
 .sheet select#mModel{width:100%;background:var(--bg2,#0f1526);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:10px;font-size:14px;margin-bottom:4px;-webkit-appearance:none;appearance:none}
@@ -459,7 +460,10 @@ footer{text-align:center;font-size:11px;color:var(--faint);padding:20px 16px 8px
   <button class="expand-btn snap-btn" id="snapBtn" title="Share chart image">📷</button>
   <button class="expand-btn" id="expandBtn" title="Enlarge">⤢</button>
 </div>
-<div class="modelrow cmprow hidden" id="cmprow"><label id="cmpLbl" for="cmpSel">对比</label><select id="cmpSel"></select></div>
+<div class="cmprow hidden" id="cmprow">
+<button class="modelhead" id="cmpHead"><span class="csec-car">▾</span><span class="mh-label" id="cmpLbl">对比</span><span class="mh-cur" id="cmpCur"></span></button>
+<div class="modeltiles hidden" id="cmpTiles"></div>
+</div>
 
 <div class="chartfs hidden" id="chartFs">
   <div class="chartfs-bar"><span id="fsTitle">Sounding</span><button class="fs-close" id="fsClose" title="Close" aria-label="Close">✕</button></div>
@@ -468,7 +472,9 @@ footer{text-align:center;font-size:11px;color:var(--faint);padding:20px 16px 8px
     <svg id="chartBig" viewBox="0 0 540 560" preserveAspectRatio="xMidYMid meet"></svg>
   </div>
   <div class="fs-timebar">
-    <div class="fs-parcelwrap"><select id="cmpSelFs" class="fs-cmpsel"></select><div class="seg" id="parcelSegFs">
+    <button class="modelhead" id="cmpHeadFs"><span class="csec-car">▾</span><span class="mh-label" id="cmpLblFs">对比</span><span class="mh-cur" id="cmpCurFs"></span></button>
+    <div class="modeltiles hidden" id="cmpTilesFs"></div>
+    <div class="fs-parcelwrap"><div class="seg" id="parcelSegFs">
       <button data-parcel="sb"></button><button data-parcel="ml"></button><button data-parcel="mu"></button>
     </div></div>
     <div class="fs-slabel" id="fsSliderLabel"></div>
@@ -562,7 +568,7 @@ const MODELS=[
 /* ================= radiosonde overlay (observed balloon vs forecast) =================
    SONDE_WORKER: paste your deployed Cloudflare Worker URL here (see sonde-worker.js).
    Leave empty to disable — the button will show a setup hint instead of failing silently. */
-const APP_BUILD="v64";   // bump together with sw.js CACHE_VERSION on every deploy
+const APP_BUILD="v67";   // bump together with sw.js CACHE_VERSION on every deploy
 const SONDE_WORKER="https://sonde-worker.standphoto.workers.dev";
 const SONDE_STATIONS=[
   {id:"48601",name:"Penang 槟城",lat:5.30,lon:100.27},
@@ -645,11 +651,24 @@ async function toggleSonde(){
 /* ================= end radiosonde overlay ================= */
 let COMPARE_MODEL=(function(){ try{const v=localStorage.getItem("skewt.cmp.v1"); return MODELS.some(m=>m.api===v)?v:""; }catch(e){ return ""; } })();
 let DATA2=null;
+let CMP_OPEN={cmp:false,cmpFs:false};
 function populateCmpSel(){
-  for(const id of ["cmpSel","cmpSelFs"]){
-    const sel=document.getElementById(id); if(!sel)continue;
-    sel.innerHTML=`<option value=""${COMPARE_MODEL===""?" selected":""}>${L("关闭对比","Compare off")}</option>`+
-      MODELS.map(m=>`<option value="${m.api}"${m.api===COMPARE_MODEL?" selected":""}>${m.short} · ${L(m.zh,m.en)}</option>`).join("");
+  const items=[{api:"",short:L("关闭","Off"),zh:"不叠加对比",en:"compare off"},...MODELS];
+  const cur=MODELS.find(x=>x.api===COMPARE_MODEL);
+  const curTxt=cur?`${cur.short} · ${L(cur.zh,cur.en)}`:L("关闭","Off");
+  for(const [key,headId,tilesId,curId] of [["cmp","cmpHead","cmpTiles","cmpCur"],["cmpFs","cmpHeadFs","cmpTilesFs","cmpCurFs"]]){
+    const head=document.getElementById(headId), box=document.getElementById(tilesId),
+          curEl=document.getElementById(curId);
+    if(!head||!box) continue;
+    if(curEl) curEl.textContent=curTxt;
+    const open=CMP_OPEN[key];
+    head.classList.toggle("collapsed",!open);
+    box.classList.toggle("hidden",!open);
+    head.onclick=()=>{ CMP_OPEN[key]=!CMP_OPEN[key]; populateCmpSel(); };
+    if(!open){ box.innerHTML=""; continue; }
+    box.innerHTML=items.map(x=>
+      `<button class="mtile${x.api===COMPARE_MODEL?" on":""}" data-api="${x.api}"><b>${x.short}</b><span class="ms">${L(x.zh,x.en)}</span></button>`).join("");
+    box.querySelectorAll(".mtile").forEach(t=>{ t.onclick=()=>setCompare(t.dataset.api); });
   }
 }
 function updateFsTitle(){
@@ -2645,13 +2664,11 @@ document.getElementById("sondeBtn").onclick=toggleSonde;
 function setCompare(v){
   COMPARE_MODEL=v;
   try{localStorage.setItem("skewt.cmp.v1",COMPARE_MODEL);}catch(err){}
-  for(const id of ["cmpSel","cmpSelFs"]){ const s2=document.getElementById(id); if(s2&&s2.value!==v)s2.value=v; }
+  CMP_OPEN.cmp=false; CMP_OPEN.cmpFs=false;   // selection made: collapse both sheets
+  populateCmpSel();
   updateFsTitle();
   refreshCompare();
 }
-["cmpSel","cmpSelFs"].forEach(id=>{
-  const s2=document.getElementById(id); if(s2)s2.onchange=e=>setCompare(e.target.value);
-});
 function updateParcelSeg(){
   document.querySelectorAll("#parcelSeg button, #parcelSegFs button").forEach(b=>{
     b.classList.toggle("on", b.dataset.parcel===PARCEL_SEL);
@@ -2681,45 +2698,74 @@ document.getElementById("shareBtn").onclick=()=>{
   // plain text only: emoji render as � on some receiving devices (WhatsApp Web/Windows),
   // and broadcasts get forwarded everywhere — reliability beats decoration
   const vPlain=v.replace(/^[^\p{L}\p{N}*]+/u,"");   // strip any leading emoji from the verdict
+  const vParts=vPlain.replace(/。$/,"").split(/\s—\s/);   // bold the short claim; details go on their own line
   // farmer's bottom line + risk window: the parts a village broadcast actually needs
   const FS=(typeof farmerSummaryParts==="function")?farmerSummaryParts():null;
-  const strip=(t)=>String(t||"").replace(/^[^\p{L}\p{N}*]+/u,"").trim();
-  const riskLine = FS ? (FS.riskFrom!=null
-      ? L(`雷暴风险时段：约 ${FS.at(FS.riskFrom)}–${FS.at(FS.riskTo)}`,`Storm-risk window: ~${FS.at(FS.riskFrom)}–${FS.at(FS.riskTo)}`)
-      : L(`今日无明显风暴时段`,`No clear storm window today`)) : null;
-  const lightsLine = FS&&FS.lights ? FS.lights.map(([c,m,t])=>`${m} ${t}`).join(" · ") : null;
+  const strip=(t)=>String(t||"").replace(/^[^\p{L}\p{N}*≥]+/u,"").trim();   // keep ≥ (used in "≥5mm")
+  // one idea per SHORT line: split sentences so nothing becomes a wall of text on a phone
+  const sentences=(t)=>strip(t).split(LANG==="zh"?/。|\s—\s/:/(?:\.\s+|\.$|\s—\s)/).map(x=>x.trim()).filter(Boolean);
+  // risk window: the 24h span can wrap past midnight — never print "18:00–17:00"
+  let riskLine=null;
+  if(FS){
+    if(FS.riskFrom==null) riskLine=L("今日无明显风暴时段","No clear storm window today");
+    else if(FS.riskTo-FS.riskFrom>=10) riskLine=L(`风暴风险：约 ${FS.at(FS.riskFrom)} 起 · 持续多时`,`Storm risk: from ~${FS.at(FS.riskFrom)} · long-lasting`);
+    else riskLine=L(`风暴风险：约 ${FS.at(FS.riskFrom)}–${FS.at(FS.riskTo)}`,`Storm risk: ~${FS.at(FS.riskFrom)}–${FS.at(FS.riskTo)}`);
+  }
+  // work lights, short labels; "–" for the dimmed seed light (a bare "·" read as a typo)
+  const lightsLine = FS&&FS.lights ? FS.lights.map(([c,m,t])=>
+      `${c===""?"–":m} ${t.split("/")[0]}`).join(" · ") : null;
   const fsBlock = FS ? [
       L(`【农户小结】`,`*FARMER'S BOTTOM LINE*`),
-      strip(FS.what)+(FS.ensLine?` ${String(FS.ensLine).trim()}`:""),
-      ...(FS.windowLine?[strip(FS.windowLine)]:[]),
-      ...(riskLine?[riskLine]:[]),
+      ...sentences(FS.what).map(x=>`· ${x}`),
+      ...(FS.ensLine?sentences(FS.ensLine).map(x=>`· ${x}`):[]),
+      ...(FS.windowLine?sentences(FS.windowLine).map(x=>`· ${x}`):[]),
+      ...(riskLine?[`· ${riskLine}`]:[]),
       ...(lightsLine?[lightsLine]:[]),
       ``] : [];
+  // rain timing: WHEN it rains and how hard — the current hour alone misleads
+  const pr=(h.precipitation||[]);
+  let rFirst=null,rPeak=null;
+  for(let i=HR_START;i<=HR_END;i++){
+    const x=+pr[i]||0;
+    if(x>=0.3){ if(rFirst==null)rFirst=i; if(rPeak==null||x>(+pr[rPeak]||0))rPeak=i; }
+  }
+  const atH=(i)=>fmtHour(h.time[i]);
+  const rainLines = rFirst==null
+    ? [L("雨量：全天基本无雨（此模式）","Rain: essentially none today (this model)")]
+    : [L(`下雨时间：约 ${atH(rFirst)} 起`,`Rain starts: ~${atH(rFirst)}`),
+       L(`雨最大：${atH(rPeak)} 前后 · ${(+pr[rPeak]).toFixed(1)} mm/h`,`Heaviest: ~${atH(rPeak)} · ${(+pr[rPeak]).toFixed(1)} mm/h`)];
+  // plain-language day summary instead of raw CAPE/CIN/PW numbers
+  const capeW=(c)=>c==null?null:c>=2500?L("极强","very strong"):c>=1500?L("很强","strong"):c>=800?L("中等","moderate"):c>=300?L("偏弱","weak"):L("很弱","very weak");
+  const pwW=(w)=>w==null?null:w>=55?L("非常充足","very plentiful"):w>=45?L("充足","plentiful"):w>=35?L("一般","moderate"):L("偏干","on the dry side");
+  const shW=(x)=>x==null?null:x>=40?L("强（易组织成片）","strong (organised storms)"):x>=25?L("中等","moderate"):L("弱（短时阵性）","weak (brief showers)");
+  const dayBits=[
+    capeW(A.capeMU!=null?A.capeMU:A.cape)&&L(`能量${capeW(A.capeMU!=null?A.capeMU:A.cape)}`,`fuel ${capeW(A.capeMU!=null?A.capeMU:A.cape)}`),
+    pwW(A.pw)&&L(`水汽${pwW(A.pw)}`,`moisture ${pwW(A.pw)}`),
+    A.shear!=null&&L(`风切${shW(A.shear)}`,`shear ${shW(A.shear)}`)
+  ].filter(Boolean);
   const lines=L(
     [`*SkewT 探空*`,
      `${label}`,
      `${fmtFull(h.time[CUR_I])} · ${tz}`,
      ``,
-     `*${vPlain}*`,
+     `*${vParts[0]}*`,
+     ...vParts.slice(1),
      ``,
      ...fsBlock,
-     `降雨：${rainWordOf(rain)} · ${rain.toFixed(1)} mm/h`,
-     ...(typeof ENS!=="undefined"&&ENS&&ENS.stats&&ENS.stats[CUR_I]?[`集合：中位 ${ENS.stats[CUR_I].p50.toFixed(1)} mm · ≥5mm ${ENS.stats[CUR_I].t5}% · ${ensConfWord()}`]:[]),
-     `CAPE ${num(A.cape)} J/kg · CIN ${num(A.cin)} J/kg · 可降水量 ${num(A.pw)} mm`,
-     `${shearTxt} · 云量 ${num(P.cloud)}%`,
+     ...rainLines,
+     ...(dayBits.length?[`今天：${dayBits.join(" · ")}`]:[]),
      ``,
      `模式：${modelShort()} · Open-Meteo`],
     [`*SkewT Sounding*`,
      `${label}`,
      `${fmtFull(h.time[CUR_I])} · ${tz}`,
      ``,
-     `*${vPlain}*`,
+     `*${vParts[0]}*`,
+     ...vParts.slice(1),
      ``,
      ...fsBlock,
-     `Rain: ${rainWordOf(rain)} · ${rain.toFixed(1)} mm/h`,
-     ...(typeof ENS!=="undefined"&&ENS&&ENS.stats&&ENS.stats[CUR_I]?[`Ensemble: median ${ENS.stats[CUR_I].p50.toFixed(1)} mm · ≥5mm ${ENS.stats[CUR_I].t5}% · ${ensConfWord()}`]:[]),
-     `CAPE ${num(A.cape)} J/kg · CIN ${num(A.cin)} J/kg · PW ${num(A.pw)} mm`,
-     `${shearTxt} · cloud ${num(P.cloud)}%`,
+     ...rainLines,
+     ...(dayBits.length?[`Today: ${dayBits.join(" · ")}`]:[]),
      ``,
      `Model: ${modelShort()} · Open-Meteo`]).join("\n");
   window.open("https://wa.me/?text="+encodeURIComponent(lines),"_blank");

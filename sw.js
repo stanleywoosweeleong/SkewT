@@ -5,7 +5,7 @@
    app fully usable with no connection.
    Bumping CACHE_VERSION is still good hygiene (it purges old caches on activate),
    but is no longer required for users to receive updates. */
-const CACHE_VERSION = "skewt-v64-bigtiles";
+const CACHE_VERSION = "skewt-v67-raintiming";
 
 self.addEventListener("install", e => self.skipWaiting());
 
