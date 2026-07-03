@@ -528,7 +528,7 @@ const MODELS=[
 /* ================= radiosonde overlay (observed balloon vs forecast) =================
    SONDE_WORKER: paste your deployed Cloudflare Worker URL here (see sonde-worker.js).
    Leave empty to disable — the button will show a setup hint instead of failing silently. */
-const APP_BUILD="v56";   // bump together with sw.js CACHE_VERSION on every deploy
+const APP_BUILD="v57";   // bump together with sw.js CACHE_VERSION on every deploy
 const SONDE_WORKER="https://sonde-worker.standphoto.workers.dev";
 const SONDE_STATIONS=[
   {id:"48601",name:"Penang 槟城",lat:5.30,lon:100.27},
@@ -544,14 +544,11 @@ function sondePrefOn(){ try{ return localStorage.getItem("skewt.sondeOn.v1")!=="
 function setSondePref(on){ try{ localStorage.setItem("skewt.sondeOn.v1", on?"1":"0"); }catch(e){} }
 let WIND_SCALE_MAX=null;   // km/h axis max shared by all 24 hours — keeps the wind charts from rescaling while scrubbing
 let HT_SCALE_MAX=null;     // km height-axis max shared by all 24 hours — same reason (top wind level varies by hour)
-function nearestSonde(lat,lon){
-  let best=null,bd=1e9;
-  for(const st of SONDE_STATIONS){
-    const d=Math.hypot((st.lat-lat)*111,(st.lon-lon)*111*Math.cos(lat*Math.PI/180));
-    if(d<bd){bd=d;best={...st,km:Math.round(d)};}
-  }
-  return best;
+function rankedSondes(lat,lon){
+  return SONDE_STATIONS.map(st=>({...st,km:Math.round(Math.hypot((st.lat-lat)*111,(st.lon-lon)*111*Math.cos(lat*Math.PI/180)))}))
+    .sort((a,b)=>a.km-b.km);
 }
+function nearestSonde(lat,lon){ return rankedSondes(lat,lon)[0]; }
 function sondeInfoMsg(txt,warn){
   const e=document.getElementById("sondeInfo");
   if(e){e.textContent=txt;e.classList.toggle("warn",!!warn);}
@@ -577,24 +574,33 @@ async function toggleSonde(){
   setSondePref(true);
   if(!LATLON){ sondeInfoMsg(L("请先加载一个地点。","Load a location first."),true); return; }
   if(!SONDE_WORKER){ sondeInfoMsg(L("未配置探空数据源 — 请部署 sonde-worker.js 并把网址填入 SONDE_WORKER。","Sonde source not configured — deploy sonde-worker.js and set SONDE_WORKER."),true); return; }
-  const st=nearestSonde(LATLON[0],LATLON[1]);
-  sondeInfoMsg(L(`正在获取 ${st.name} 实测探空…`,`Fetching ${st.name} sounding…`));
-  const base=`${SONDE_WORKER.replace(/\/$/,"")}/?stn=${st.id}`;
+  const ranked=rankedSondes(LATLON[0],LATLON[1]);
+  sondeInfoMsg(L(`正在获取 ${ranked[0].name} 实测探空…`,`Fetching ${ranked[0].name} sounding…`));
+  const wbase=SONDE_WORKER.replace(/\/$/,"");
   const ageOf=(iso)=>{ try{ return (Date.now()-new Date(iso).getTime())/3600e3; }catch(_){ return 999; } };
-  try{
-    let r=await fetch(base);
-    let d=await r.json();
+  const getStn=async(st,fresh)=>{
+    const r=await fetch(`${wbase}/?stn=${st.id}${fresh?"&fresh="+Date.now():""}`);
+    const d=await r.json();
     if(!r.ok||!d.levels) throw new Error(d.error||("HTTP "+r.status));
-    // if what we got is stale (>13h), the worker may be serving a 6h-cached older cycle
-    // while a newer launch has since published upstream — force one uncached re-check.
-    if(ageOf(d.time)>13){
-      try{
-        const r2=await fetch(base+"&fresh="+Date.now());
-        const d2=await r2.json();
-        if(r2.ok&&d2.levels&&ageOf(d2.time)<ageOf(d.time)) d=d2;   // keep it only if genuinely newer
-      }catch(_){/* keep the first result */}
+    return {...d, stName:st.name.split(" ")[0], km:st.km};
+  };
+  try{
+    // 1) nearest station; if stale, one cache-busted re-check (worker may hold an older cycle)
+    let best=await getStn(ranked[0],false);
+    if(ageOf(best.time)>13){
+      try{ const f=await getStn(ranked[0],true); if(ageOf(f.time)<ageOf(best.time)) best=f; }catch(_){}
     }
-    SONDE={...d, stName:st.name.split(" ")[0], km:st.km};
+    // 2) still stale? see whether the next two nearest stations launched more recently —
+    //    a fresher balloon 200 km away can beat a 21-hour-old one nearby. Distance stays visible.
+    if(ageOf(best.time)>13){
+      for(const st of ranked.slice(1,3)){
+        try{
+          const alt=await getStn(st,false);
+          if(ageOf(alt.time)<ageOf(best.time)-3) best=alt;   // switch only for a clear freshness win
+        }catch(_){/* try next */}
+      }
+    }
+    SONDE=best;
     SONDE_ON=true; updateSondeUI(); if(DATA)showHour(CUR_I);
   }catch(e){
     SONDE=null; SONDE_ON=false;
@@ -1223,8 +1229,14 @@ function renderFarmerSummary(){
     if(maxT5>=40) ensLine+=L(" 雨水够用，可暂停灌溉。"," Rain should be enough — you can pause irrigation.");
   }
   // spray window: name the dry window and when rain most likely starts — farmers judge for themselves
+  // spray guidance keys off WORKING hours (06–19 local): night rain is information, not urgency
+  const hrOf=(i)=>+String(h.time[i]).slice(11,13);
+  const rainAtNight = firstRainI!=null && (hrOf(firstRainI)>=19 || hrOf(firstRainI)<6);
   let windowLine="";
-  if(firstRainI!=null && firstRainI>HR_START+2){
+  if(firstRainI!=null && rainAtNight){
+    windowLine=L(`🌂 白天干爽，雨约 ${at(firstRainI)}（夜间）才到 — 日间喷药、晾晒不受影响。`,
+                 `🌂 Daytime stays dry — rain holds off until ~${at(firstRainI)} (overnight); daytime spraying and drying unaffected.`);
+  } else if(firstRainI!=null && firstRainI>HR_START+2){
     windowLine=L(`🌂 大约 ${at(firstRainI)} 前干爽 — 要喷药/叶面肥就趁早、赶在雨前喷完晾干。`,
                  `🌂 Dry until about ${at(firstRainI)} — if spraying, do it early and let it dry before the rain.`);
   } else if(firstRainI!=null){
@@ -1248,7 +1260,7 @@ function renderFarmerSummary(){
   // DRY-window jobs: green when the morning stays dry, red when it won't
   // spray: we give the window and trust the farmer's judgment — so this is informational, not a veto.
   // green when there's a usable dry window (rain not until after the early hours); amber if rain comes early.
-  const sprayWindowOK = (firstRainI==null) || (firstRainI>HR_START+2);
+  const sprayWindowOK = (firstRainI==null) || rainAtNight || (firstRainI>HR_START+2);
   const spray = sprayWindowOK ? "ok" : "warn";       // chemical / foliar spray
   const sundry=light(dayT5>=50||worst>=3, dayT1>=40||worst>=2); // laundry / produce sunbathing
   // RAIN-positive job: seeding & fertilizer are BEST just before decent rain waters them in.
@@ -1722,6 +1734,20 @@ function interpProf(prof,p,key){
 // render the magnifier + readout at CROSS_POS on the given svg
 function drawMagnifier(svg){
   if(!CROSS_PROF||!CROSS_POS)return;
+  // surface-only model (e.g. IFS 9km): a one-level profile can't say anything about 382 hPa —
+  // pin the readout to the surface and say so, rather than extrapolating surface values aloft.
+  if(CROSS_PROF.length<3){
+    const sfc=CROSS_PROF[0];
+    const tip=document.getElementById(svg.id==="chartBig"?"crossTipBig":"crossTip");
+    if(tip&&sfc){
+      tip.innerHTML=`<b>${L("地面","Surface")}</b> · ${Math.round(sfc.p)} hPa`+
+        `<span class="ttrow"><i style="background:var(--temp)"></i>T ${sfc.T!=null?sfc.T.toFixed(1):"—"}°C`+
+        `<i style="background:var(--dew)"></i>Td ${sfc.Td!=null?sfc.Td.toFixed(1):"—"}°C</span>`+
+        `<span class="ttinterp">💡 ${L(`${modelShort()} 为地面模式 — 无高空数据；高空请选 IFS 0.25°／AIFS／GFS。`,`${modelShort()} is surface-only — no upper-air data; pick IFS 0.25°, AIFS or GFS for aloft.`)}</span>`;
+      tip.style.opacity="1";
+    }
+    return;
+  }
   const x=Math.max(X0,Math.min(X1,CROSS_POS.x));
   const y=Math.max(Y0,Math.min(Y1,CROSS_POS.y));
   const p=pOf(y);
