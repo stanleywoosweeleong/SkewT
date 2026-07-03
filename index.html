@@ -194,11 +194,12 @@ button.compact{padding:9px 12px;font-size:15px;line-height:1}
   .chartfs{overflow-y:auto}
   .chartfs-body{flex:0 0 auto;display:block;padding:0;position:relative}
   .chartfs-body svg{width:100%;height:auto;max-width:none}
-  /* readout sits BELOW the chart in normal flow — the plot is never covered */
-  .chartfs-bar{order:1}
+  /* readout sits BELOW the chart in normal flow — the plot is never covered.
+     flex-shrink:0 everywhere: nothing may compress and overlap; the column scrolls instead. */
+  .chartfs-bar{order:1;flex:0 0 auto}
   .chartfs-body{order:2}
-  #crossTipBig{order:3;position:static;transform:none;left:auto;top:auto;width:auto;max-width:none;margin:6px 10px;z-index:auto;pointer-events:auto;background:var(--panel2);font-size:11.5px;padding:8px 11px;min-height:0}
-  .fs-timebar{order:4}
+  #crossTipBig{order:3;flex:0 0 auto;position:static;transform:none;left:auto;top:auto;width:auto;max-width:none;margin:6px 10px;z-index:auto;pointer-events:auto;background:var(--panel2);font-size:11.5px;padding:8px 11px;min-height:0}
+  .fs-timebar{order:4;flex:0 0 auto}
   .fs-parcelwrap{display:flex;gap:8px;align-items:center;justify-content:center;margin-bottom:8px;flex-wrap:wrap}
   .fs-cmpsel{display:inline-block;margin:0;width:auto;max-width:46%;flex:0 1 auto;padding:6px 8px;font-size:11.5px}
   .fs-timebar{padding-top:8px}
@@ -568,7 +569,7 @@ const MODELS=[
 /* ================= radiosonde overlay (observed balloon vs forecast) =================
    SONDE_WORKER: paste your deployed Cloudflare Worker URL here (see sonde-worker.js).
    Leave empty to disable — the button will show a setup hint instead of failing silently. */
-const APP_BUILD="v67";   // bump together with sw.js CACHE_VERSION on every deploy
+const APP_BUILD="v68";   // bump together with sw.js CACHE_VERSION on every deploy
 const SONDE_WORKER="https://sonde-worker.standphoto.workers.dev";
 const SONDE_STATIONS=[
   {id:"48601",name:"Penang 槟城",lat:5.30,lon:100.27},
