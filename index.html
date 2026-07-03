@@ -194,7 +194,11 @@ button.compact{padding:9px 12px;font-size:15px;line-height:1}
   .chartfs{overflow-y:auto}
   .chartfs-body{flex:0 0 auto;display:block;padding:0;position:relative}
   .chartfs-body svg{width:100%;height:auto;max-width:none}
-  #crossTipBig{position:absolute;top:6px;left:50%;transform:translateX(-50%);width:auto;max-width:92%;margin:0;z-index:6;pointer-events:none;background:rgba(18,24,40,.86);backdrop-filter:blur(3px);font-size:11.5px;padding:7px 11px;min-height:0}
+  /* readout sits BELOW the chart in normal flow — the plot is never covered */
+  .chartfs-bar{order:1}
+  .chartfs-body{order:2}
+  #crossTipBig{order:3;position:static;transform:none;left:auto;top:auto;width:auto;max-width:none;margin:6px 10px;z-index:auto;pointer-events:auto;background:var(--panel2);font-size:11.5px;padding:8px 11px;min-height:0}
+  .fs-timebar{order:4}
   .fs-parcelwrap{display:flex;gap:8px;align-items:center;justify-content:center;margin-bottom:8px;flex-wrap:wrap}
   .fs-cmpsel{display:inline-block;margin:0;width:auto;max-width:46%;flex:0 1 auto;padding:6px 8px;font-size:11.5px}
   .fs-timebar{padding-top:8px}
@@ -316,6 +320,20 @@ body.lang-zh .crosstip .ttinterp{font-size:12.5px}
 .sonderow button.on{color:var(--accent);border-color:var(--accent)}
 .sondeinfo{font-size:11.5px;color:var(--faint);line-height:1.4;min-height:1em}
 .sondeinfo.warn{color:var(--warn)}
+.modelhead{display:flex;align-items:center;gap:9px;margin:6px 12px;padding:11px 13px;background:var(--panel);border:1px solid var(--line);border-radius:12px;color:var(--ink);cursor:pointer;width:calc(100% - 24px);text-align:left;-webkit-tap-highlight-color:transparent}
+.modelhead .csec-car{color:var(--accent);font-size:11px;transition:transform .15s}
+.modelhead.collapsed .csec-car{transform:rotate(-90deg)}
+.mh-label{color:var(--faint);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}
+.mh-cur{flex:1;text-align:right;color:var(--accent);font-weight:800;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* expanded sheet: full-bleed, edge to edge */
+.modeltiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;width:100vw;position:relative;left:50%;transform:translateX(-50%);padding:4px 10px 8px;box-sizing:border-box}
+.modeltiles.hidden{display:none}
+.mtile{padding:18px 6px 15px;border:1.5px solid var(--line);border-radius:16px;background:var(--panel);text-align:center;cursor:pointer;color:var(--dim);-webkit-tap-highlight-color:transparent}
+.mtile b{display:block;font-size:19px;font-weight:800;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.01em}
+.mtile .ms{display:block;font-size:11px;font-weight:600;color:var(--faint);margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mtile.on{border-color:var(--accent);background:rgba(255,107,61,.12);box-shadow:0 0 0 1px rgba(255,107,61,.25)}
+.mtile.on b,.mtile.on .ms{color:var(--accent)}
+.mnote-row{padding:0 12px 2px;text-align:right}
 .mnote{flex:0 0 auto;font-size:11px;font-weight:700;color:var(--accent);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .modelrow{flex-wrap:wrap}
 .sheet select#mModel{width:100%;background:var(--bg2,#0f1526);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:10px;font-size:14px;margin-bottom:4px;-webkit-appearance:none;appearance:none}
@@ -348,8 +366,8 @@ body.lang-zh .crosstip .ttinterp{font-size:12.5px}
 details{margin:6px 12px;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
 summary{padding:12px 14px;font-size:13px;font-weight:700;cursor:pointer;list-style:none}
 summary::-webkit-details-marker{display:none}
-summary::after{content:"▾";float:right;color:var(--accent);font-weight:800;font-size:11px;transform:rotate(-90deg);transition:transform .15s;display:inline-block}
-details[open] summary::after{transform:rotate(0deg)}
+summary::before{content:"▾";color:var(--accent);font-weight:800;font-size:11px;transform:rotate(-90deg);transition:transform .15s;display:inline-block;margin-right:8px}
+details[open] summary::before{transform:rotate(0deg)}
 .dbody{padding:0 14px 14px;font-size:13.5px;color:var(--dim);line-height:1.65}
 .dbody b{color:var(--ink)}
 .err{margin:12px;padding:12px 14px;border-radius:10px;background:#2a1320;border:1px solid var(--danger);color:#ffb0c0;font-size:13px;line-height:1.5}
@@ -375,7 +393,9 @@ footer{text-align:center;font-size:11px;color:var(--faint);padding:20px 16px 8px
 <div class="toolbar toolbar-share">
   <button id="shareBtn" class="hidden wabtn">WhatsApp</button>
 </div>
-<div class="modelrow"><label id="modelLbl" for="modelSel">模式</label><select id="modelSel"></select><span class="mnote" id="modelNote"></span></div>
+<button class="modelhead" id="modelHead"><span class="csec-car" id="modelCar">▾</span><span class="mh-label" id="modelLbl">模式</span><span class="mh-cur" id="modelCur"></span></button>
+<div class="modeltiles hidden" id="modelTiles"></div>
+<div class="mnote-row"><span class="mnote" id="modelNote"></span></div>
 <div class="sonderow"><button id="sondeBtn">🎈</button><span class="sondeinfo" id="sondeInfo"></span></div>
 
 <div class="pickwrap" id="pickwrap">
@@ -542,7 +562,7 @@ const MODELS=[
 /* ================= radiosonde overlay (observed balloon vs forecast) =================
    SONDE_WORKER: paste your deployed Cloudflare Worker URL here (see sonde-worker.js).
    Leave empty to disable — the button will show a setup hint instead of failing silently. */
-const APP_BUILD="v59";   // bump together with sw.js CACHE_VERSION on every deploy
+const APP_BUILD="v64";   // bump together with sw.js CACHE_VERSION on every deploy
 const SONDE_WORKER="https://sonde-worker.standphoto.workers.dev";
 const SONDE_STATIONS=[
   {id:"48601",name:"Penang 槟城",lat:5.30,lon:100.27},
@@ -554,7 +574,7 @@ const SONDE_STATIONS=[
   {id:"96481",name:"Tawau 斗湖",lat:4.27,lon:117.89},
 ];
 let SONDE=null, SONDE_ON=false;
-function sondePrefOn(){ try{ return localStorage.getItem("skewt.sondeOn.v1")!=="0"; }catch(e){ return true; } }
+function sondePrefOn(){ try{ return localStorage.getItem("skewt.sondeOn.v1")==="1"; }catch(e){ return false; } }
 function setSondePref(on){ try{ localStorage.setItem("skewt.sondeOn.v1", on?"1":"0"); }catch(e){} }
 let WIND_SCALE_MAX=null;   // km/h axis max shared by all 24 hours — keeps the wind charts from rescaling while scrubbing
 let HT_SCALE_MAX=null;     // km height-axis max shared by all 24 hours — same reason (top wind level varies by hour)
@@ -676,9 +696,30 @@ function applyFarmModel(key,seedDefault){
 }
 let MODEL=(function(){ try{ const m=localStorage.getItem("skewt.model.v1"); return MODELS.some(x=>x.api===m)?m:"ecmwf_ifs025"; }catch(e){ return "ecmwf_ifs025"; } })();
 function modelShort(){ const m=MODELS.find(x=>x.api===MODEL); return m?m.short:MODEL; }
+let MODEL_PICK_OPEN=false;
 function populateModelSel(){
-  const sel=document.getElementById("modelSel"); if(!sel)return;
-  sel.innerHTML=MODELS.map(m=>`<option value="${m.api}"${m.api===MODEL?" selected":""}>${m.short} · ${L(m.zh,m.en)}</option>`).join("");
+  const box=document.getElementById("modelTiles"), head=document.getElementById("modelHead"),
+        cur=document.getElementById("modelCur"); if(!box||!head)return;
+  const m=MODELS.find(x=>x.api===MODEL);
+  if(cur) cur.textContent = m? `${m.short} · ${L(m.zh,m.en)}` : MODEL;
+  head.classList.toggle("collapsed",!MODEL_PICK_OPEN);
+  box.classList.toggle("hidden",!MODEL_PICK_OPEN);
+  head.onclick=()=>{ MODEL_PICK_OPEN=!MODEL_PICK_OPEN; populateModelSel(); };
+  if(!MODEL_PICK_OPEN) return;   // collapsed: row only, save the screen space
+  box.innerHTML=MODELS.map(x=>
+    `<button class="mtile${x.api===MODEL?" on":""}" data-api="${x.api}"><b>${x.short}</b><span class="ms">${L(x.zh,x.en)}</span></button>`).join("");
+  box.querySelectorAll(".mtile").forEach(t=>{ t.onclick=()=>setModel(t.dataset.api); });
+}
+function setModel(api){
+  if(api===MODEL){ MODEL_PICK_OPEN=false; populateModelSel(); return; }
+  MODEL=api;
+  try{localStorage.setItem("skewt.model.v1",MODEL);}catch(err){}
+  const key=farmModelKey();
+  if(key!=null){ FARM_MODELS[key]=MODEL; saveFarmModels(); renderList(); }  // remember per farm (RainScore workflow)
+  MODEL_PICK_OPEN=false;       // selection made: collapse back to the row
+  populateModelSel();
+  updateModelNote();
+  if(LATLON) load(LATLON[0],LATLON[1],LASTLABEL);   // re-pull sounding with the new model
 }
 /* ---- shared storm scoring: single source of truth for the ingredients panel,
        the 24-hour risk strip, and the WhatsApp share ---- */
@@ -831,8 +872,8 @@ function buildGuide(){
     `<b>24小时风险条</b>是小时格上方的彩色细条：暗色=平静，绿色=潮湿/毛毛雨，琥珀=可能有风暴，红色=要素齐备。它用与“会下雨/雷暴吗”面板相同的评分，让你一眼看出该担心哪个时段 — 点击任一格即可跳到该小时。<br><br><b>📤 分享</b>按钮把当前地点、时刻、结论、CAPE/CIN/可降水量与所用模式打包成简讯，一键发送到 WhatsApp。<br><br>应用会<b>记住上次查看的地点</b>并在下次打开时自动载入。`,
     `The <b>24-hour risk strip</b> is the thin coloured bar above the hour tiles: dim = quiet, green = moist/drizzle, amber = storms possible, red = ingredients in place. It uses the same scoring as the "Is a storm coming?" panel so you can see at a glance which hour to worry about — tap any segment to jump to that hour.<br><br>The <b>📤 share</b> button packages the location, hour, verdict, CAPE/CIN/PW and the model in use into a short message and opens WhatsApp.<br><br>The app <b>remembers the last location</b> you viewed and auto-loads it next time you open it.`)
   +D(L("实测探空叠加（气球观测）","Observed sounding overlay (radiosonde)"),
-    `<b>探空气球（radiosonde）</b>是气象局每天施放的真实观测：气球携带传感器升空，逐层实测温度、湿度与风 — 它是大气廓线的“地面真相”。应用会<b>默认</b>把<b>最近站点的最新实测</b>以灰白虚线叠加到预报曲线上（点🎈可隐藏，选择会被记住）：两组曲线贴近说明模式可信；实测更湿、更暖或逆温位置不同，就是模式的偏差 — 这正是 RainScore Lab 思想应用到整个大气柱。<br><br>注意：马来西亚的施放站点有限（雪邦、槟城、哥打峇鲁及东马数站），距离果园可能上百公里，且每天仅00Z/12Z施放两次 — 界面会显示站点、施放时间与<b>数据年龄</b>，并标明「每日两次施放」；两次之间自然会有十来个小时的间隔，属正常节奏，只有明显缺班（超过约26小时）才会提示。`,
-    `A <b>radiosonde</b> is the real thing: a weather-service balloon carrying sensors that measure temperature, humidity and wind layer by layer as it rises — the ground truth for the atmospheric profile. The app overlays the <b>latest launch from the nearest station</b> as grey/white dashed curves on top of the forecast <b>by default</b> (tap 🎈 to hide — your choice is remembered): curves hugging each other means the model is trustworthy; the observation being moister, warmer, or placing an inversion elsewhere is the model's bias — RainScore Lab thinking applied to the whole column.<br><br>Note: Malaysia's launch network is sparse (Sepang, Penang, Kota Bharu and a few East Malaysia sites), possibly 100+ km from your orchard, launching only twice a day at 00Z/12Z — the app shows the station, launch time and <b>data age</b>, labelled "launches twice daily". A gap of a dozen-odd hours between launches is the normal cadence, not stale data; only a genuinely missed launch (past ~26 h) is flagged.`)
+    `<b>探空气球（radiosonde）</b>是气象局每天施放的真实观测：气球携带传感器升空，逐层实测温度、湿度与风 — 它是大气廓线的“地面真相”。点🎈即可把<b>最近站点的最新实测</b>以灰白虚线叠加到预报曲线上（按需开启 — 若最近站点缺数据，应用会自动尝试邻近站点，可能需要几秒；你的开关选择会被记住）：两组曲线贴近说明模式可信；实测更湿、更暖或逆温位置不同，就是模式的偏差 — 这正是 RainScore Lab 思想应用到整个大气柱。<br><br>注意：马来西亚的施放站点有限（雪邦、槟城、哥打峇鲁及东马数站），距离果园可能上百公里，且每天仅00Z/12Z施放两次 — 界面会显示站点、施放时间与<b>数据年龄</b>，并标明「每日两次施放」；两次之间自然会有十来个小时的间隔，属正常节奏，只有明显缺班（超过约26小时）才会提示。`,
+    `A <b>radiosonde</b> is the real thing: a weather-service balloon carrying sensors that measure temperature, humidity and wind layer by layer as it rises — the ground truth for the atmospheric profile. Tap 🎈 to overlay the <b>latest launch from the nearest station</b> as grey/white dashed curves on top of the forecast (on demand — if the nearest station has no data the app automatically tries neighbouring stations, which can take a few seconds; your on/off choice is remembered): curves hugging each other means the model is trustworthy; the observation being moister, warmer, or placing an inversion elsewhere is the model's bias — RainScore Lab thinking applied to the whole column.<br><br>Note: Malaysia's launch network is sparse (Sepang, Penang, Kota Bharu and a few East Malaysia sites), possibly 100+ km from your orchard, launching only twice a day at 00Z/12Z — the app shows the station, launch time and <b>data age</b>, labelled "launches twice daily". A gap of a dozen-odd hours between launches is the normal cadence, not stale data; only a genuinely missed launch (past ~26 h) is flagged.`)
   +D(L("气块选择、DCAPE 与新图层","Parcels, DCAPE & the new layers"),
     `<b>抬升气块（SB/ML/MU）：</b>图上方的选择器决定沿虚线抬升的是哪种气块。<b>SB 地面</b>＝地面空气（午后经典）；<b>ML 混合层</b>＝最底层100 hPa的平均（更能代表整层受热）；<b>MU 最不稳定</b>＝低层300 hPa内θe最高的那层 — <b>清晨逆温压住地面时，燃料常藏在逆温之上</b>，此时SB CAPE很小而MU CAPE很大。「CAPE 三气块」卡片一眼对比三者；「会下雨吗」面板的燃料用MU判断、盖子用SB判断，因此清晨不再低估午后风险。<br><br><b>DCAPE 下沉能量：</b>雨水在中层干空气中蒸发降温，冷空气砸向地面形成<b>下击暴流</b> — 会扫落果实、折断枝条。DCAPE越大风越猛：&lt;400弱，400–800中等，800–1200强，&gt;1200极强。<br><br><b>新图层：</b>青色细线＝<b>湿球温度</b>；右侧蓝色竖条＝<b>湿度/云层带</b>（越蓝越接近饱和）；「对比」下拉可叠加<b>第二个模式</b>（紫色曲线）直接看分歧；<b>时间-高度湿度图</b>把24小时的水汽结构铺成一张图，点任一列即可跳到该小时；📷按钮把当前探空图<b>生成图片分享</b>到 WhatsApp。`,
     `<b>Lifted parcels (SB/ML/MU):</b> the selector above the chart chooses which parcel rises along the dashed line. <b>SB Surface</b> = ground air (classic afternoon); <b>ML Mixed-layer</b> = average of the lowest 100 hPa (represents whole-layer heating); <b>MU Most-unstable</b> = the highest-θe level in the lowest 300 hPa — <b>on mornings when an inversion pins the surface, the fuel often hides above it</b>, so SB CAPE reads tiny while MU CAPE is large. The "CAPE 3 parcels" card compares all three at a glance; the storm panel judges fuel with MU and the cap with SB, so mornings no longer understate the afternoon threat.<br><br><b>DCAPE, downdraft energy:</b> rain evaporating into dry mid-level air chills it, and that cold air crashes to the ground as a <b>downburst</b> — the wind that strips fruit and snaps branches. Bigger DCAPE = harder crash: &lt;400 weak, 400–800 moderate, 800–1200 strong, &gt;1200 extreme.<br><br><b>New layers:</b> the thin cyan line is the <b>wet-bulb temperature</b>; the blue strip on the right edge is the <b>humidity/cloud bar</b> (bluer = closer to saturation); the <b>Compare</b> dropdown overlays a <b>second model</b> (violet curves) to see disagreement directly; the <b>time-height humidity panel</b> lays the whole day's moisture structure out in one picture — tap a column to jump to that hour; and the 📷 button renders the current sounding as an <b>image to share</b> on WhatsApp.`)
@@ -2549,7 +2590,7 @@ async function load(lat,lon,label){
     try{localStorage.setItem("skewt.lastLoc.v1",JSON.stringify({lat,lon,label:LASTLABEL,activeId:(typeof ACTIVE_ID!=="undefined"?ACTIVE_ID:null)}));}catch(e){}
     st.textContent="";
     buildHourStrip();
-    if(SONDE_WORKER && sondePrefOn()) toggleSonde();   // observed sounding overlays by default (user's hide choice is remembered)
+    if(SONDE_WORKER && sondePrefOn()) toggleSonde();   // opt-in: only auto-load if the user turned it on before (fallback chain can be slow)
     fetchEnsemble();   // ensemble fan refreshes per location/model (async, never blocks the chart)
     if(COMPARE_MODEL) refreshCompare();                // second-model overlay follows the location
     // bring the chart into view consistently: only if the user is scrolled down,
@@ -2624,14 +2665,7 @@ document.querySelectorAll("#parcelSeg button, #parcelSegFs button").forEach(b=>b
 });
 (function(){ const d=document.querySelector('details[data-acc="hodo-note"]');
   if(d){ if(accOpen("hodo-note",false)) d.setAttribute("open",""); d.ontoggle=()=>{ACC["hodo-note"]=d.open?1:0;accSave();}; } })();
-document.getElementById("modelSel").onchange=e=>{
-  MODEL=e.target.value;
-  try{localStorage.setItem("skewt.model.v1",MODEL);}catch(err){}
-  const key=farmModelKey();
-  if(key!=null){ FARM_MODELS[key]=MODEL; saveFarmModels(); renderList(); }  // remember per farm (RainScore workflow)
-  updateModelNote();
-  if(LATLON) load(LATLON[0],LATLON[1],LASTLABEL);   // re-pull sounding with the new model
-};
+/* model tiles wire their own clicks in populateModelSel() */
 document.getElementById("shareBtn").onclick=()=>{
   if(!LAST_P||!LAST_A||!DATA)return;
   const P=LAST_P, A=LAST_A, h=DATA.hourly;
