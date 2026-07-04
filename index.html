@@ -341,7 +341,10 @@ body.lang-zh .crosstip .ttinterp{font-size:12.5px}
 #cmprow{display:block}
 .mnote{flex:0 0 auto;font-size:11px;font-weight:700;color:var(--accent);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .modelrow{flex-wrap:wrap}
-.sheet select#mModel{width:100%;background:var(--bg2,#0f1526);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:10px;font-size:14px;margin-bottom:4px;-webkit-appearance:none;appearance:none}
+/* inline farm-model picker inside the add/edit sheet: header flush to sheet width, tiles below */
+.sheet #farmModelHead{width:100%;margin:0 0 6px;box-sizing:border-box}
+.sheet #farmModelHead .mh-cur{text-align:left;flex:1}
+.sheet #farmModelTiles{grid-template-columns:repeat(2,1fr);margin:0 0 8px}
 .mtag{display:inline-block;margin-left:6px;padding:1px 7px;font-size:9.5px;font-weight:800;letter-spacing:.03em;color:var(--accent);border:1px solid var(--accent);border-radius:999px;vertical-align:2px;opacity:.85}
 .notebox>summary{color:var(--dim);font-weight:600}
 #ingredients{padding:6px 12px}
@@ -429,8 +432,10 @@ footer{text-align:center;font-size:11px;color:var(--faint);padding:20px 16px 8px
       </div>
       <label id="lblRegion" for="mReg"></label>
       <input id="mReg" placeholder="My farms 我的果园" autocomplete="off"/>
-      <label id="lblModel2" for="mModel"></label>
-      <select id="mModel"></select>
+      <label id="lblModel2"></label>
+      <input type="hidden" id="mModel" value=""/>
+      <button type="button" class="modelhead" id="farmModelHead"><span class="csec-car">▾</span><span class="mh-cur" id="farmModelCur"></span></button>
+      <div class="modeltiles hidden" id="farmModelTiles"></div>
       <button class="gps-btn" id="mUseGps"></button>
       <div class="gps-status" id="gpsStatus"></div>
       <div class="sheet-actions">
@@ -573,7 +578,7 @@ const MODELS=[
 /* ================= radiosonde overlay (observed balloon vs forecast) =================
    SONDE_WORKER: paste your deployed Cloudflare Worker URL here (see sonde-worker.js).
    Leave empty to disable — the button will show a setup hint instead of failing silently. */
-const APP_BUILD="v69";   // bump together with sw.js CACHE_VERSION on every deploy
+const APP_BUILD="v70";   // bump together with sw.js CACHE_VERSION on every deploy
 const SONDE_WORKER="https://sonde-worker.standphoto.workers.dev";
 const SONDE_STATIONS=[
   {id:"48601",name:"Penang 槟城",lat:5.30,lon:100.27},
@@ -697,11 +702,33 @@ try{ if(FARM_MODELS["@myloc"]!==undefined){ delete FARM_MODELS["@myloc"]; localS
 function saveFarmModels(){ try{localStorage.setItem("skewt.farmModel.v1",JSON.stringify(FARM_MODELS));}catch(e){} }
 function farmModelKey(){ return ACTIVE_ID!=null?String(ACTIVE_ID):null; }  // GPS location has NO sticky model — free choice every time
 function modelShortOf(api){ const m=MODELS.find(x=>x.api===api); return m?m.short:null; }
+let FARM_MODEL_PICK_OPEN=false;
+function farmModelCurLabel(v){
+  if(!v) return L("跟随当前模式","Follow current model");
+  const m=MODELS.find(x=>x.api===v); return m?`${m.short} · ${L(m.zh,m.en)}`:v;
+}
 function populateFarmModelSel(){
-  const sel=document.getElementById("mModel"); if(!sel)return;
-  const cur=sel.value||"";
-  sel.innerHTML=`<option value="">${L("跟随当前模式","Follow current model")}</option>`+
-    MODELS.map(m=>`<option value="${m.api}"${m.api===cur?" selected":""}>${m.short} · ${L(m.zh,m.en)}</option>`).join("");
+  const hid=document.getElementById("mModel"),
+        head=document.getElementById("farmModelHead"),
+        curEl=document.getElementById("farmModelCur"),
+        box=document.getElementById("farmModelTiles");
+  if(!hid||!head||!box)return;
+  const cur=hid.value||"";
+  if(curEl) curEl.textContent=farmModelCurLabel(cur);
+  head.classList.toggle("collapsed",!FARM_MODEL_PICK_OPEN);
+  box.classList.toggle("hidden",!FARM_MODEL_PICK_OPEN);
+  head.onclick=()=>{ FARM_MODEL_PICK_OPEN=!FARM_MODEL_PICK_OPEN; populateFarmModelSel(); };
+  if(!FARM_MODEL_PICK_OPEN) return;   // collapsed: header only, save the screen space
+  // first tile = "follow current model" (empty value); then the global model list
+  const tiles=[{api:"",short:L("自动","Auto"),sub:L("跟随当前模式","Follow current")}]
+    .concat(MODELS.map(m=>({api:m.api,short:m.short,sub:L(m.zh,m.en)})));
+  box.innerHTML=tiles.map(x=>
+    `<button type="button" class="mtile${x.api===cur?" on":""}" data-api="${x.api}"><b>${x.short}</b><span class="ms">${x.sub}</span></button>`).join("");
+  box.querySelectorAll(".mtile").forEach(t=>{ t.onclick=()=>{
+    hid.value=t.dataset.api;           // keep the hidden field authoritative (save/reset read .value)
+    FARM_MODEL_PICK_OPEN=false;        // selection made: collapse back to the header
+    populateFarmModelSel();
+  }; });
 }
 function updateModelNote(){
   const e=document.getElementById("modelNote"); if(!e)return;
@@ -2479,6 +2506,7 @@ function addFarm(){
   u.push({id:"u"+Date.now(),name,lat,lng,region:reg,deleted:false,...(mdl?{model:mdl}:{})});
   saveUserFarms(u);
   ["mName","mLat","mLng","mReg","mModel"].forEach(i=>{const el=document.getElementById(i); if(el)el.value="";});
+  FARM_MODEL_PICK_OPEN=false; populateFarmModelSel();   // reset the inline picker to collapsed "Auto"
   gs.textContent="";
   OPEN_REGIONS.add(reg);
   const f=u[u.length-1]; ACTIVE_ID=f.id;
