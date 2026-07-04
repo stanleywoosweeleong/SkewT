@@ -28,6 +28,7 @@ header{padding:18px 16px 10px}
 .brand{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .brand h1{font-size:19px;font-weight:800;letter-spacing:-0.02em}
 .brand .sub{font-size:11px;color:var(--faint);font-weight:600;text-transform:uppercase;letter-spacing:0.14em}
+.brand .sub:empty{display:none}
 .info-btn{margin-left:4px;padding:0;width:32px;height:32px;font-size:20px;line-height:1;background:transparent;border:none;box-shadow:none;color:var(--dim);cursor:pointer}
 .info-btn:active{transform:none;color:var(--accent)}
 .lang-btn{flex:0 0 auto;margin-left:auto;padding:5px 12px;font-size:13px;font-weight:800;border-radius:999px;background:transparent;border:1px solid var(--line);color:var(--dim);letter-spacing:.04em}
@@ -415,7 +416,7 @@ footer{text-align:center;font-size:11px;color:var(--faint);padding:20px 16px 8px
 </head>
 <body>
 <header>
-  <div class="brand"><h1 id="appTitle">云天</h1><span class="sub">Log-P</span><button class="lang-btn" id="langBtn">中文</button><button class="info-btn" id="infoBtn" title="Guide" aria-label="Guide">ⓘ</button></div>
+  <div class="brand"><h1 id="appTitle">云天</h1><span class="sub" id="appSub"></span><button class="lang-btn" id="langBtn">中文</button><button class="info-btn" id="infoBtn" title="Guide" aria-label="Guide">ⓘ</button></div>
   <div class="tagline" id="tagline">大气探空 · 降雨预报</div>
 </header>
 
@@ -626,7 +627,7 @@ const MODELS=[
 /* ================= radiosonde overlay (observed balloon vs forecast) =================
    SONDE_WORKER: paste your deployed Cloudflare Worker URL here (see sonde-worker.js).
    Leave empty to disable — the button will show a setup hint instead of failing silently. */
-const APP_BUILD="v87";   // bump together with sw.js CACHE_VERSION on every deploy
+const APP_BUILD="v88";   // bump together with sw.js CACHE_VERSION on every deploy
 const SONDE_WORKER="https://sonde-worker.standphoto.workers.dev";
 const SONDE_STATIONS=[
   {id:"48601",name:"Penang 槟城",lat:5.30,lon:100.27},
@@ -997,6 +998,7 @@ function applyStaticLang(){
   const H=(id,v)=>{const e=document.getElementById(id); if(e)e.innerHTML=v;};
   T("langBtn", LANG==="zh"?"中文":"EN");
   T("appTitle", L("云天","SkewT Sounding"));
+  T("appSub", L("","Log-P"));
   T("tagline", L("大气探空 · 降雨预报","Vertical atmosphere profile & rain analysis"));
   T("locBtn", L("📍 我的位置","📍 My location"));
   T("addBtn", L("＋ 添加果园","＋ Add farm"));
@@ -3037,7 +3039,6 @@ document.getElementById("shareBtn").onclick=()=>{
     return L("夜安！","Good night!"); })();
   const lines=L(
     [`${greet}`,
-     `云天 · 大气探空 · 降雨预报`,
      `${label}`,
      `${fmtFull(h.time[CUR_I])} · ${tz}`,
      ``,
@@ -3050,7 +3051,6 @@ document.getElementById("shareBtn").onclick=()=>{
      ...(dayBits.length?[`今天：${dayBits.join(" · ")}`]:[]),
      `模式：${modelShort()} · Open-Meteo`],
     [`${greet}`,
-     `SkewT Sounding · rain forecast`,
      `${label}`,
      `${fmtFull(h.time[CUR_I])} · ${tz}`,
      ``,
