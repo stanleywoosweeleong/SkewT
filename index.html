@@ -176,9 +176,11 @@ button.compact{padding:9px 12px;font-size:15px;line-height:1}
 }
 /* fullscreen chart overlay */
 .chartfs{position:fixed;inset:0;background:var(--bg);z-index:60;display:flex;flex-direction:column;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
-.chartfs-bar{display:flex;align-items:center;justify-content:space-between;padding:12px 16px 6px}
-.chartfs-bar #fsTitle{font-size:15px;font-weight:800;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-right:12px}
+.chartfs-bar{display:flex;align-items:center;justify-content:flex-start;padding:2px 16px 0}
+.chartfs-bar #fsTitle{font-size:16px;font-weight:800;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .fs-close{width:38px;height:38px;padding:0;font-size:16px;font-weight:700;border-radius:50%;flex:0 0 auto;color:var(--dim)}
+/* close button floats over the chart's top-right, echoing the tap-to-enlarge affordance */
+.fs-close-float{position:absolute;top:6px;right:10px;z-index:5;width:36px;height:36px;background:var(--panel);border:1px solid var(--line);color:var(--ink);box-shadow:0 2px 8px rgba(0,0,0,.35);-webkit-tap-highlight-color:transparent}
 .chartfs-body{flex:1;position:relative;display:flex;align-items:center;justify-content:center;min-height:0;padding:0 8px}
 .chartfs-body svg{width:100%;height:100%;max-width:100%;display:block}
 .fs-timebar{padding:8px 16px calc(10px + env(safe-area-inset-bottom))}
@@ -194,12 +196,13 @@ button.compact{padding:9px 12px;font-size:15px;line-height:1}
   .chartfs{overflow-y:auto}
   .chartfs-body{flex:0 0 auto;display:block;padding:0;position:relative}
   .chartfs-body svg{width:100%;height:auto;max-width:none}
-  /* readout sits BELOW the chart in normal flow — the plot is never covered.
+  /* chart sits at the TOP so the close button (floating over it) lands where the
+     tap-to-enlarge affordance was; readout + title + slider follow below in flow.
      flex-shrink:0 everywhere: nothing may compress and overlap; the column scrolls instead. */
-  .chartfs-bar{order:1;flex:0 0 auto}
-  .chartfs-body{order:2}
-  #crossTipBig{order:3;flex:0 0 auto;position:static;transform:none;left:auto;top:auto;width:auto;max-width:none;margin:6px 10px;z-index:auto;pointer-events:auto;background:var(--panel2);font-size:11.5px;padding:8px 11px;min-height:0}
-  .fs-timebar{order:4;flex:0 0 auto}
+  .chartfs-body{order:1;flex:0 0 auto}
+  #crossTipBig{order:2;flex:0 0 auto;position:static;transform:none;left:auto;top:auto;width:auto;max-width:none;margin:6px 10px;z-index:auto;pointer-events:auto;background:var(--panel2);font-size:11.5px;padding:8px 11px;min-height:0}
+  .fs-timebar{order:3;flex:0 0 auto}
+  .fs-timebar .chartfs-bar{padding:2px 2px 6px}
   .fs-parcelwrap{display:flex;gap:8px;align-items:center;justify-content:center;margin-bottom:8px;flex-wrap:wrap}
   .fs-cmpsel{display:inline-block;margin:0;width:auto;max-width:46%;flex:0 1 auto;padding:6px 8px;font-size:11.5px}
   .fs-timebar{padding-top:8px}
@@ -211,23 +214,23 @@ button.compact{padding:9px 12px;font-size:15px;line-height:1}
   .chartfs{
     display:grid;
     grid-template-columns:minmax(0,1fr) 340px;
-    grid-template-rows:auto 1fr;
+    grid-template-rows:1fr;
     column-gap:20px;
     align-items:stretch;
   }
-  .chartfs-bar{grid-column:1 / -1; grid-row:1;}
-  .chartfs-body{grid-column:1; grid-row:2; padding:0 0 16px 16px;}
+  .chartfs-body{grid-column:1; grid-row:1; padding:12px 0 16px 16px;}
   .chartfs-body svg{width:auto;height:100%;max-height:100%;margin:0 auto;}
   #crossTipBig{
-    grid-column:2; grid-row:2;
-    align-self:start; margin:0 16px 0 0;
+    grid-column:2; grid-row:1;
+    align-self:start; margin:12px 16px 0 0;
     max-width:100%;
     position:static;transform:none;left:auto;top:auto;pointer-events:auto;
   }
   .fs-timebar{
-    grid-column:2; grid-row:2;
+    grid-column:2; grid-row:1;
     align-self:end; margin:0 16px 0 0; padding-bottom:24px;
   }
+  .fs-timebar .chartfs-bar{padding:0 0 8px}
 }
 .fs-slrow{display:flex;align-items:center;gap:12px}
 #fsSlider,#windSlider{flex:1;width:100%;-webkit-appearance:none;appearance:none;height:6px;border-radius:6px;background:var(--panel2);outline:none}
@@ -467,12 +470,13 @@ footer{text-align:center;font-size:11px;color:var(--faint);padding:20px 16px 8px
 </div>
 
 <div class="chartfs hidden" id="chartFs">
-  <div class="chartfs-bar"><span id="fsTitle">Sounding</span><button class="fs-close" id="fsClose" title="Close" aria-label="Close">✕</button></div>
-  <div id="crossTipBig" class="crosstip crosstip-fs"></div>
   <div class="chartfs-body">
+    <button class="fs-close fs-close-float" id="fsClose" title="Close" aria-label="Close">✕</button>
     <svg id="chartBig" viewBox="0 0 540 560" preserveAspectRatio="xMidYMid meet"></svg>
   </div>
+  <div id="crossTipBig" class="crosstip crosstip-fs"></div>
   <div class="fs-timebar">
+    <div class="chartfs-bar"><span id="fsTitle">Sounding</span></div>
     <button class="modelhead" id="cmpHeadFs"><span class="csec-car">▾</span><span class="mh-label" id="cmpLblFs">对比</span><span class="mh-cur" id="cmpCurFs"></span></button>
     <div class="modeltiles hidden" id="cmpTilesFs"></div>
     <div class="fs-parcelwrap"><div class="seg" id="parcelSegFs">
@@ -569,7 +573,7 @@ const MODELS=[
 /* ================= radiosonde overlay (observed balloon vs forecast) =================
    SONDE_WORKER: paste your deployed Cloudflare Worker URL here (see sonde-worker.js).
    Leave empty to disable — the button will show a setup hint instead of failing silently. */
-const APP_BUILD="v68";   // bump together with sw.js CACHE_VERSION on every deploy
+const APP_BUILD="v69";   // bump together with sw.js CACHE_VERSION on every deploy
 const SONDE_WORKER="https://sonde-worker.standphoto.workers.dev";
 const SONDE_STATIONS=[
   {id:"48601",name:"Penang 槟城",lat:5.30,lon:100.27},
@@ -675,7 +679,7 @@ function populateCmpSel(){
 function updateFsTitle(){
   const e=document.getElementById("fsTitle"); if(!e)return;
   const base=(LASTLABEL==="@myloc")?L("当前位置","Current location"):(LASTLABEL||L("探空","Sounding"));
-  e.textContent=base+" · "+modelShort()+(COMPARE_MODEL?` vs ${modelShortOf(COMPARE_MODEL)||""}`:"");
+  e.textContent=base;
 }
 async function refreshCompare(){
   if(!COMPARE_MODEL||!LATLON){ DATA2=null; if(DATA)showHour(CUR_I); return; }
