@@ -406,6 +406,7 @@ summary::before{content:"▾";color:var(--accent);font-weight:800;font-size:11px
 details[open] summary::before{transform:rotate(0deg)}
 .dbody{padding:0 14px 14px;font-size:13.5px;color:var(--dim);line-height:1.65}
 .dbody b{color:var(--ink)}
+.stale{margin:8px 12px;padding:10px 14px;border-radius:10px;background:#2a2410;border:1px solid var(--warn);color:#ffe7a8;font-size:15px;font-weight:700;line-height:1.45}
 .err{margin:12px;padding:12px 14px;border-radius:10px;background:#2a1320;border:1px solid var(--danger);color:#ffb0c0;font-size:13px;line-height:1.5}
 .tick{font-size:10.5px;fill:var(--faint)}
 .axl{font-size:10px;fill:var(--dim);font-weight:600}
@@ -544,6 +545,7 @@ footer{text-align:center;font-size:11px;color:var(--faint);padding:20px 16px 8px
   </div>
 </div>
 <div class="loc hidden" id="loc"></div>
+<div class="stale hidden" id="staleNote" role="status"></div>
 <div class="legendwrap hidden" id="legendWrap">
   <button class="legend-head" id="legendHead"><span class="lg-caret" id="legendCaret">▾</span><span id="legendTitle"></span></button>
   <div class="legend" id="legend"></div>
@@ -604,7 +606,7 @@ function setLang(l){
   LANG=l; try{localStorage.setItem("skewt.lang.v1",l);}catch(e){}
   applyStaticLang();
   renderList(); renderBin();
-  if(typeof DATA!=="undefined" && DATA){ showHour(CUR_I); renderLocCaption(); }
+  if(typeof DATA!=="undefined" && DATA){ showHour(CUR_I); renderLocCaption(); updateStaleNote(); }
 }
 function toggleLang(){ setLang(LANG==="zh"?"en":"zh"); }
 function renderLocCaption(){
@@ -628,7 +630,7 @@ const MODELS=[
 /* ================= radiosonde overlay (observed balloon vs forecast) =================
    SONDE_WORKER: paste your deployed Cloudflare Worker URL here (see sonde-worker.js).
    Leave empty to disable — the button will show a setup hint instead of failing silently. */
-const APP_BUILD="v89";   // bump together with sw.js CACHE_VERSION on every deploy
+const APP_BUILD="v90";   // bump together with sw.js CACHE_VERSION on every deploy
 const SONDE_WORKER="https://sonde-worker.standphoto.workers.dev";
 const SONDE_STATIONS=[
   {id:"48601",name:"Penang 槟城",lat:5.30,lon:100.27},
@@ -669,8 +671,11 @@ function updateSondeUI(){
       ` · ${SONDE.km} km`, reallyOld);
   } else if(!SONDE_ON){ sondeInfoMsg(""); }
 }
+let SONDE_SEQ=0;
 async function toggleSonde(){
-  if(SONDE_ON){ SONDE_ON=false; setSondePref(false); updateSondeUI(); if(DATA)showHour(CUR_I); return; }
+  if(SONDE_ON){ SONDE_ON=false; SONDE_SEQ++; setSondePref(false); updateSondeUI(); if(DATA)showHour(CUR_I); return; }
+  const my=++SONDE_SEQ, seq=LOAD_SEQ;               // v90: a late balloon reply for the old farm is dropped
+  const live=()=>my===SONDE_SEQ&&seq===LOAD_SEQ;
   setSondePref(true);
   if(!LATLON){ sondeInfoMsg(L("请先加载一个地点。","Load a location first."),true); return; }
   if(!SONDE_WORKER){ sondeInfoMsg(L("未配置探空数据源 — 请部署 sonde-worker.js 并把网址填入 SONDE_WORKER。","Sonde source not configured — deploy sonde-worker.js and set SONDE_WORKER."),true); return; }
@@ -700,9 +705,11 @@ async function toggleSonde(){
         }catch(_){/* try next */}
       }
     }
+    if(!live()) return;
     SONDE=best;
     SONDE_ON=true; updateSondeUI(); if(DATA)showHour(CUR_I);
   }catch(e){
+    if(!live()) return;
     SONDE=null; SONDE_ON=false;
     sondeInfoMsg(L("实测探空获取失败：","Sounding fetch failed: ")+e.message,true);
     const b=document.getElementById("sondeBtn"); if(b)b.classList.remove("on");
@@ -736,12 +743,19 @@ function updateFsTitle(){
   const base=(LASTLABEL==="@myloc")?L("当前位置","Current location"):(LASTLABEL||L("探空","Sounding"));
   e.textContent=base;
 }
+let CMP_SEQ=0;
 async function refreshCompare(){
-  if(!COMPARE_MODEL||!LATLON){ DATA2=null; if(DATA)showHour(CUR_I); return; }
+  const my=++CMP_SEQ;                               // v90: newest compare request wins
+  DATA2=null;                                       // never overlay the previous farm/model's curve meanwhile
+  if(!COMPARE_MODEL||!LATLON){ if(DATA)showHour(CUR_I); return; }
+  const seq=LOAD_SEQ, cm=COMPARE_MODEL, at=LATLON.slice();
+  if(DATA)showHour(CUR_I);
   try{
-    DATA2=await getSounding(LATLON[0],LATLON[1],COMPARE_MODEL);
+    const d=await getSounding(at[0],at[1],cm);
+    if(my!==CMP_SEQ||seq!==LOAD_SEQ||cm!==COMPARE_MODEL) return;
+    DATA2=d;
     if(DATA)showHour(CUR_I);
-  }catch(e){ DATA2=null; if(DATA)showHour(CUR_I); }
+  }catch(e){ if(my!==CMP_SEQ)return; DATA2=null; if(DATA)showHour(CUR_I); }
 }
 function modelIsSurfaceOnly(){ const m=MODELS.find(x=>x.api===MODEL); return !!(m&&m.surfaceOnly); }
 /* ---- per-farm default model (populated from RainScore Lab findings) ----
@@ -841,7 +855,7 @@ function stormScores(P,A){
   else if(m>=2 && i===0) branch=1;
   else branch=0;
   // strip level: verdict branch, bumped by actual forecast rain
-  const rain=P.precip||0;
+  const rain=(P.precip!=null)?P.precip:0;   // missing rain → no bump (the verdict still stands on physics)
   let level=branch;
   if(rain>=4) level=3; else if(rain>=0.5) level=Math.max(level,2); else if(rain>=0.1) level=Math.max(level,1);
   return {m,i,l,s:sc,branch,level};
@@ -1147,13 +1161,17 @@ async function getSounding(lat,lon,modelOverride){
 /* ---------- build one hour's profile ---------- */
 function buildProfile(d,i){
   const h=d.hourly;
-  const sp=h.surface_pressure[i]||1000;
+  const spRaw=h.surface_pressure?h.surface_pressure[i]:null;
+  const sp=(spRaw!=null&&isFinite(spRaw))?spRaw:1000;
   const prof=[];
-  // surface level
-  prof.push({p:Math.min(sp,1000), T:h.temperature_2m[i], Td:h.dew_point_2m[i],
+  // surface level at its TRUE pressure. (v90: it used to be clipped to 1000 hPa, so on
+  // a lowland farm with sp≈1010 the surface AND the 1000 hPa level both sat at 1000 —
+  // two points at one pressure gave log(p1/p2)=0 and 0/0 interpolation.) The chart
+  // bottom is 1000 hPa; a 1010 hPa surface sits ~3 px below the frame, inside the viewBox.
+  prof.push({p:sp, T:h.temperature_2m[i], Td:h.dew_point_2m[i],
              ws:h.wind_speed_10m[i], wd:h.wind_direction_10m[i], sfc:true});
   for(const p of LEVELS){
-    if(p>sp-5) continue;
+    if(p>sp-5) continue;          // strictly above the surface: never a duplicate pressure
     const T=h[`temperature_${p}hPa`][i];
     const rh=h[`relative_humidity_${p}hPa`][i];
     if(T==null||rh==null) continue;
@@ -1163,7 +1181,9 @@ function buildProfile(d,i){
   }
   prof.sort((a,b)=>b.p-a.p);
   const g=(k)=>h[k]?h[k][i]:null;
-  return {prof, elev:(d.elevation!=null?d.elevation:null), precip:h.precipitation[i]||0,
+  // missing rain stays null (shown as "—" / "data missing"), never silently becomes 0 mm
+  const pr=(h.precipitation&&h.precipitation[i]!=null&&isFinite(h.precipitation[i]))?h.precipitation[i]:null;
+  return {prof, elev:(d.elevation!=null?d.elevation:null), precip:pr,
     pop:(h.precipitation_probability&&h.precipitation_probability[i]!=null)?h.precipitation_probability[i]:null,
     cape:h.cape?h.cape[i]:null, time:h.time[i],
     windSpd:g("wind_speed_10m"), windDir:g("wind_direction_10m"), gust:g("wind_gusts_10m"),
@@ -1260,13 +1280,16 @@ function ensStats(members,i){
 async function fetchEnsemble(){
   ENS=null; renderEnsemble();
   if(!LATLON)return;
+  const seq=LOAD_SEQ, forModel=MODEL;               // v90: tie this response to the load that asked for it
   const em=ENS_MAP[MODEL]||"ecmwf_ifs025";
+  const ENS_T0=Date.now(); fetchEnsemble._last=ENS_T0;
   try{
     const url=`https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${LATLON[0]}&longitude=${LATLON[1]}`+
       `&hourly=precipitation&models=${em}&forecast_days=2&timezone=auto`;
     const r=await fetch(url);
     if(!r.ok) throw new Error("HTTP "+r.status);
     const d=await r.json();
+    if(seq!==LOAD_SEQ||forModel!==MODEL||fetchEnsemble._last!==ENS_T0) return;   // superseded
     const h=d.hourly||{};
     const members=Object.keys(h).filter(k=>/^precipitation(_member\d+)?$/.test(k)).map(k=>h[k]);
     if(members.length<5) throw new Error(L("该模式无集合数据","no ensemble for this model"));
@@ -1284,6 +1307,7 @@ async function fetchEnsemble(){
     const sub = provider(em)!==provider(MODEL) ? {from:MODEL, to:em} : null;
     ENS={model:em,nMembers:members.length,stats,confCls:conf[0],confWord:conf[1],w,sub};
   }catch(e){
+    if(seq!==LOAD_SEQ||forModel!==MODEL||fetchEnsemble._last!==ENS_T0) return;
     ENS={error:String(e.message||e)};
   }
   renderEnsemble();
@@ -1383,8 +1407,8 @@ function farmerSummaryParts(){
   const dayKey=(i)=>String(h.time[i]).slice(0,10);
   const atDay=(i)=>{
     if(i==null) return "";
-    const d0=new Date(dayKey(HR_START)+"T00:00:00").getTime();
-    const di=new Date(dayKey(i)+"T00:00:00").getTime();
+    const d0=Date.parse(dayKey(HR_START)+"T00:00:00Z");
+    const di=Date.parse(dayKey(i)+"T00:00:00Z");
     const dd=Math.round((di-d0)/86400000);
     const t=at(i);
     if(dd<=0) return t;
@@ -1770,8 +1794,33 @@ function analyze(P){
   const vecToSpdDir=(w)=>w?{spd:Math.hypot(w.u,w.v)/MS, dir:(Math.atan2(-w.u,-w.v)*180/Math.PI+360)%360}:null;
   const bunkRmo=vecToSpdDir(bunkR), bunkLmo=vecToSpdDir(bunkL);
 
-  // convective temperature: surface T needed for parcel to reach LCL along mixing ratio → approx = Tlcl brought dry-adiabatically to sfc
-  const convT = K2C(dryLift(Tlcl, lclP, sfc.p));
+  // convective temperature (v90 fix). The old line brought the parcel's own LCL temperature
+  // back down its own dry adiabat — which by construction returns the surface temperature,
+  // so "convT ≈ T now" and the Trigger panel always said "Ready". Correct method:
+  // 1) follow the SURFACE mixing-ratio line up until it meets the environmental temperature
+  //    = the Convective Condensation Level (CCL);
+  // 2) bring the CCL temperature dry-adiabatically back to the surface.
+  // null when the line never meets the profile below 500 hPa (no heating-only trigger).
+  const convT = (function(){
+    if(sfc.T==null||sfc.Td==null) return null;
+    if(sfc.T-sfc.Td<=0) return sfc.T;                              // already saturated
+    const rS=mixingRatioFromDew(sfc.Td,sfc.p);                     // g/kg
+    const tdAtR=(p)=>{ const e=rS*p/(622+rS); const ln=Math.log(e/6.112); return 243.5*ln/(17.67-ln); };
+    let pPrev=sfc.p, dPrev=sfc.T-tdAtR(sfc.p);
+    for(let k=1;k<prof.length;k++){
+      const l=prof[k]; if(l.p<500) break;
+      if(l.T==null) continue;
+      const d=l.T-tdAtR(l.p);
+      if(d<=0){
+        const f=dPrev/(dPrev-d);
+        const pC=Math.exp(Math.log(pPrev)+f*(Math.log(l.p)-Math.log(pPrev)));
+        const tC=tdAtR(pC);
+        return K2C(dryLift(C2K(tC),pC,sfc.p));
+      }
+      pPrev=l.p; dPrev=d;
+    }
+    return null;
+  })();
 
   // precip type hint
   let ptype="Rain";
@@ -1780,14 +1829,19 @@ function analyze(P){
   if(sfc.T<=0) ptype = (wbzP==null)?"Snow":"Freezing/sleet";
 
   // precip efficiency estimate
-  const cape=P.cape!=null?P.cape:capePos;
+  // CAPE follows the SELECTED parcel (SB/ML/MU), matching the "CAPE (SB|ML|MU)" card label
+  // and the red shaded area. (v90: it used to take the model's own CAPE field whenever
+  // present, so switching parcels changed the chart but not the number.) The model's
+  // field is kept as capeModel for reference.
+  const cape=capePos;
+  const capeModel=(P.cape!=null&&isFinite(P.cape))?P.cape:null;
   const rhSfc=100*esat(sfc.Td)/esat(sfc.T);
   let effEst = pw * (0.2 + Math.min(0.5, cape/6000)) * (rhSfc/100);
 
   // total column & PBL depth-ish
   const dd=sfc.T-sfc.Td; // surface dewpoint depression
 
-  return {path,lclP,lclHt,cape,cin,elP,lfcP,pw,LI,Tlcl:K2C(Tlcl),rhSfc,effEst,
+  return {path,lclP,lclHt,cape,capeModel,cin,elP,lfcP,pw,LI,Tlcl:K2C(Tlcl),rhSfc,effEst,
     parcels:PARCELS, parcelSel:PARCEL_SEL,
     capeSB:Math.round(pSB.cape),capeML:Math.round(pML.cape),capeMU:Math.round(pMU.cape),
     cinSB:Math.round(pSB.cin), muStartP:(mi===0?null:mL.p),
@@ -2474,8 +2528,8 @@ function srhWord(v){ if(v==null)return""; const a=Math.abs(v); if(a<100)return L
 function ptypeWord(A,P){ if(P.Tsfc!=null&&P.Tsfc<=0)return L(A.ptype==="Snow"?"雪":"冻雨/雨夹雪",A.ptype); return L("雨（暖气柱）","Rain (warm column)"); }
 function render(P,A,fc){
   const [lbl,txt2,col]=capeVerdict(A.cape);
-  const rain=P.precip;
-  let rainWord = rainWordOf(rain);
+  const rain=P.precip;                     // may be null: the model sent no rain value for this hour
+  let rainWord = rain!=null ? rainWordOf(rain) : L("降雨数据缺失","Rain data missing");
   const [fogLbl,fogCol,fogTxt]=fogAssess(P);
   const windLine = P.windSpd!=null
     ? `${windWord(P.windSpd)} · ${Math.round(P.windSpd)} km/h ${L("来自","from")} ${compass(P.windDir)}${P.gust!=null?L(`（阵风 ${Math.round(P.gust)}）`,` (gusts ${Math.round(P.gust)})`):""}`
@@ -2483,7 +2537,7 @@ function render(P,A,fc){
   const _verdictEl=document.getElementById("verdict");
   if(_verdictEl) _verdictEl.innerHTML=
     `<div class="h">${L("预报","Forecast")} · ${fc}</div>
-     <div class="big">${rainWord} · ${L(`本小时 ${rain.toFixed(1)} mm`,`${rain.toFixed(1)} mm this hour`)}${P.pop!=null?` · ${Math.round(P.pop)}%`:""}${(function(){
+     <div class="big">${rainWord}${rain!=null?` · ${L(`本小时 ${rain.toFixed(1)} mm`,`${rain.toFixed(1)} mm this hour`)}`:""}${P.pop!=null?` · ${Math.round(P.pop)}%`:""}${(function(){
         if(typeof ENS==="undefined"||!ENS||!ENS.stats)return "";
         const s=ENS.stats[CUR_I]; if(!s)return "";
         if(s.t10>=15)return ` · ≥10mm ${s.t10}%`;
@@ -2579,7 +2633,10 @@ function renderIngredients(P,A){
   ing.push(["⬆️",L("触发","Trigger"),L("风暴真能启动吗？","Can a storm actually start?"),lScore,
     capStrong?L(`被盖住 — ${Math.round(cin)} J/kg 的抑制能压着大气。破盖前风暴受阻。`,`Capped — ${Math.round(cin)} J/kg of inhibition is lidding the atmosphere. Storms held back until it breaks.`)
     : canHeat?L(`就绪 — 地面已接近 ${convT.toFixed(0)}°C 对流温度，白天加热即可点火。`,`Ready — surface is near the ${convT.toFixed(0)}°C convective temp, so daytime heating can set it off.`)
-    : L(`弱盖 — 需要锋面、海风或山地强迫抬升。`,`Weak cap — needs a front, sea breeze, or hills to force air up.`)]);
+    : convT!=null
+      ? L(`弱盖 — 地面需晒到约 ${convT.toFixed(0)}°C（现在 ${Tnow!=null?Tnow.toFixed(0):"—"}°C）才会自行起对流；未到之前要靠海风、山地或辐合抬升。`,
+          `Weak cap — the surface must heat to ~${convT.toFixed(0)}°C (now ${Tnow!=null?Tnow.toFixed(0):"—"}°C) to set off storms on its own; until then it needs a sea breeze, hills or convergence.`)
+      : L(`弱盖 — 单靠日晒点不着；需要锋面、海风或山地强迫抬升。`,`Weak cap — heating alone won't do it; needs a front, sea breeze, or hills to force air up.`)]);
   // 4. SHEAR — will storms organize / last?
   const sh=A.shear;
   const sScore=S.s;
@@ -2773,13 +2830,22 @@ function showBinView(){document.getElementById("viewBin").classList.remove("hidd
 
 /* ---------- app flow ---------- */
 let DATA=null, LATLON=null, LASTLABEL=null;
-function fmtHour(iso){const d=new Date(iso);return d.toLocaleTimeString(LOCALE(),{hour:'2-digit',minute:'2-digit',hour12:false});}
-function fmtFull(iso){const d=new Date(iso);return d.toLocaleString(LOCALE(),{weekday:'short',hour:'2-digit',minute:'2-digit',hour12:false});}
+/* Open-Meteo (timezone=auto) returns the FARM's wall-clock time with no offset, e.g.
+   "2026-09-27T14:00". new Date() would read that in the DEVICE's zone — wrong the moment
+   the phone isn't on the farm's time (travel, a VPN, a desktop set to UTC). So:
+   - locEpoch() turns it into a true instant using the response's utc_offset_seconds;
+   - fmtHour/fmtFull print the farm's wall clock exactly as given (formatted in UTC so the
+     device zone can't shift it). */
+function locEpoch(iso,d){ const off=((d||DATA)&&(d||DATA).utc_offset_seconds)||0;
+  return Date.parse(String(iso).slice(0,16)+":00Z") - off*1000; }
+function wallDate(iso){ return new Date(String(iso).slice(0,16)+":00Z"); }
+function fmtHour(iso){return wallDate(iso).toLocaleTimeString(LOCALE(),{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'UTC'});}
+function fmtFull(iso){return wallDate(iso).toLocaleString(LOCALE(),{weekday:'short',hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'UTC'});}
 
 let HR_START=0, HR_END=0, CUR_I=0;
 function buildHourStrip(){
   const h=DATA.hourly, now=Date.now();
-  let start=h.time.findIndex(t=>new Date(t).getTime()>=now-3600000);
+  let start=h.time.findIndex(t=>locEpoch(t)>=now-3600000);   // farm-time aware (see locEpoch)
   if(start<0)start=0;
   HR_START=start; HR_END=Math.min(start+23, h.time.length-1);
   const strip=document.getElementById("hours"); strip.innerHTML="";
@@ -2787,7 +2853,7 @@ function buildHourStrip(){
     const div=document.createElement("div");
     div.className="hr"+(i===start?" on":"");
     div.dataset.i=i;
-    div.innerHTML=`<div>${fmtHour(h.time[i])}</div><div class="t">${Math.round(h.temperature_2m[i])}°</div><div class="r">${(h.precipitation[i]||0).toFixed(1)}mm</div>`;
+    div.innerHTML=`<div>${fmtHour(h.time[i])}</div><div class="t">${Math.round(h.temperature_2m[i])}°</div><div class="r">${h.precipitation[i]!=null?h.precipitation[i].toFixed(1)+"mm":"—"}</div>`;
     div.onclick=()=>showHour(i);
     strip.appendChild(div);
   }
@@ -2858,7 +2924,7 @@ function showHour(i){
   }
   // keep fullscreen + wind-section sliders + labels in sync
   const h=DATA.hourly;
-  const labHtml=`<b>${fmtFull(h.time[i])}</b> · ${Math.round(h.temperature_2m[i])}° · ${(h.precipitation[i]||0).toFixed(1)} mm`;
+  const labHtml=`<b>${fmtFull(h.time[i])}</b> · ${Math.round(h.temperature_2m[i])}° · ${h.precipitation[i]!=null?h.precipitation[i].toFixed(1)+" mm":L("雨量缺失","rain n/a")}`;
   const sl=document.getElementById("fsSlider"); if(sl&&+sl.value!==i) sl.value=i;
   const lb=document.getElementById("fsSliderLabel"); if(lb) lb.innerHTML=labHtml;
   const wsl=document.getElementById("windSlider"); if(wsl&&+wsl.value!==i) wsl.value=i;
@@ -2879,11 +2945,23 @@ function openFullscreen(){
 }
 function closeFullscreen(){ document.getElementById("chartFs").classList.add("hidden"); }
 
-async function load(lat,lon,label){
+/* ---- request ordering (v90) ----
+   Every load() takes a ticket. Any response — sounding, ensemble, compare, sonde — that
+   comes back after a NEWER load started is dropped, so a slow reply for farm A can never
+   overwrite farm B (or an old model overwrite the newly picked one). */
+let LOAD_SEQ=0;
+let DATA_AT=0;            // when the shown forecast was fetched (ms) — drives auto-refresh + the age warning
+const STALE_MIN=60;       // refresh a forecast older than this when the app is looked at again
+async function load(lat,lon,label,opts){
+  opts=opts||{};
   const st=document.getElementById("status");
+  const seq=++LOAD_SEQ, model=MODEL;
+  const keepT=(opts.keepHour&&DATA&&DATA.hourly)?DATA.hourly.time[CUR_I]:null;
   try{
-    st.textContent=L("正在获取大气探空…","Pulling atmospheric sounding…");
-    DATA=await getSounding(lat,lon); LATLON=[lat,lon]; LASTLABEL=label||null;
+    if(!opts.silent) st.textContent=L("正在获取大气探空…","Pulling atmospheric sounding…");
+    const d=await getSounding(lat,lon,model);
+    if(seq!==LOAD_SEQ) return;                     // superseded by a newer farm/model pick
+    DATA=d; DATA_AT=Date.now(); DATA_MODEL=model; LATLON=[lat,lon]; LASTLABEL=label||null;
     SONDE=null; SONDE_ON=false; updateSondeUI();   // sonde overlay is per-location: reset on change
     renderLocCaption();
     ["loc","hours","hoursLabel","riskstrip","verdict","crossTip","parcelRow","chartwrap","legendWrap","fsum","cards","ingredients","pmatrix","enswrap","hodowrap","thwrap","explain","cmprow"].forEach(id=>{const el=document.getElementById(id); if(el)el.classList.remove("hidden");});
@@ -2892,7 +2970,9 @@ async function load(lat,lon,label){
     document.getElementById("shareBtn").classList.remove("hidden");
     try{localStorage.setItem("skewt.lastLoc.v1",JSON.stringify({lat,lon,label:LASTLABEL,activeId:(typeof ACTIVE_ID!=="undefined"?ACTIVE_ID:null)}));}catch(e){}
     st.textContent="";
+    updateStaleNote();
     buildHourStrip();
+    if(keepT){ const j=DATA.hourly.time.indexOf(keepT); if(j>=HR_START&&j<=HR_END&&j!==CUR_I) showHour(j); }
     if(SONDE_WORKER && sondePrefOn()) toggleSonde();   // opt-in: only auto-load if the user turned it on before (fallback chain can be slow)
     fetchEnsemble();   // ensemble fan refreshes per location/model (async, never blocks the chart)
     if(COMPARE_MODEL) refreshCompare();                // second-model overlay follows the location
@@ -2900,11 +2980,43 @@ async function load(lat,lon,label){
     // and jump instantly rather than a long smooth animation that feels like a lurch.
     requestAnimationFrame(()=>{ if(window.scrollY>4) window.scrollTo({top:0,behavior:"auto"}); });
   }catch(e){
-    document.getElementById("err").textContent="Couldn't load weather data: "+e.message+". Check your connection and try again.";
+    if(seq!==LOAD_SEQ) return;                     // an older request failing must not blank a newer one
+    // Loud, not silent: if an older forecast is still on screen, say how old it is.
+    const same=LATLON&&Math.abs(LATLON[0]-lat)<1e-6&&Math.abs(LATLON[1]-lon)<1e-6&&DATA_MODEL===model;
+    const ageTxt=(DATA&&same&&DATA_AT)?L(`（屏幕上仍是 ${ageWords(Date.now()-DATA_AT)}前的旧预报）`,` (the forecast on screen is ${ageWords(Date.now()-DATA_AT)} old)`)
+                :(DATA?L("（屏幕上仍是上一个地点/模式的预报）"," (the chart still shows the previous location/model)"):"");
+    document.getElementById("err").textContent=L("无法获取天气数据：","Couldn't load weather data: ")+e.message+ageTxt+L("。请检查网络后重试。",". Check your connection and try again.");
     document.getElementById("err").classList.remove("hidden");
     st.textContent=L("出错了，请重试。","Something went wrong.");
+    updateStaleNote();
   }
 }
+let DATA_MODEL=null;
+function ageWords(ms){ const m=Math.round(ms/60000);
+  if(m<90) return L(`${m} 分钟`,`${m} min`);
+  const h=Math.round(m/60); return L(`${h} 小时`,`${h} h`); }
+/* stale-forecast guard: show the age once it passes STALE_MIN, and refresh on return */
+function updateStaleNote(){
+  const e=document.getElementById("staleNote"); if(!e) return;
+  if(!DATA||!DATA_AT){ e.classList.add("hidden"); return; }
+  const age=Date.now()-DATA_AT;
+  if(age<STALE_MIN*60000){ e.classList.add("hidden"); return; }
+  e.textContent=L(`⚠ 这份预报是 ${ageWords(age)}前取得的 — 点 🔄 更新`,`⚠ This forecast was fetched ${ageWords(age)} ago — tap 🔄 to update`);
+  e.classList.remove("hidden");
+}
+function refreshIfStale(){
+  updateStaleNote();
+  if(!LATLON||!DATA||document.hidden||!navigator.onLine) return;
+  const tooOld=Date.now()-DATA_AT>=STALE_MIN*60000;
+  // the "now" hour has moved past the strip's first tile → re-anchor even if the data is fresh-ish
+  const h=DATA.hourly, nowIdx=h.time.findIndex(t=>locEpoch(t)>=Date.now()-3600000);
+  const rolled = nowIdx>HR_START;
+  if(tooOld) load(LATLON[0],LATLON[1],LASTLABEL,{silent:true,keepHour:true});
+  else if(rolled){ const keep=h.time[CUR_I]; buildHourStrip(); const j=h.time.indexOf(keep); if(j>=HR_START&&j<=HR_END&&j!==CUR_I) showHour(j); fetchEnsemble(); }
+}
+document.addEventListener("visibilitychange",()=>{ if(!document.hidden) refreshIfStale(); });
+window.addEventListener("online",refreshIfStale);
+setInterval(refreshIfStale, 5*60*1000);
 
 document.getElementById("locBtn").onclick=()=>{
   const st=document.getElementById("status");
@@ -2987,7 +3099,6 @@ document.getElementById("shareBtn").onclick=()=>{
   const label=(LASTLABEL==="@myloc")?L("当前位置","Current location"):(LASTLABEL||L("探空","Sounding"));
   const tz=DATA.timezone_abbreviation||DATA.timezone||"";
   const v=stormVerdict(stormScores(P,A).branch)[0];
-  const rain=P.precip||0;
   const num=(x,d=0)=>x!=null&&isFinite(x)?(+x).toFixed(d):"—";
   // shear is null when the model lacks upper-air winds (e.g. IFS 9km) — say so, don't print a fake 0
   const shearTxt = A.shear==null
@@ -3022,10 +3133,16 @@ document.getElementById("shareBtn").onclick=()=>{
   const atH=(i)=>fmtHour(h.time[i]);
   const dayOf=(i)=>String(h.time[i]).slice(0,10);   // YYYY-MM-DD of an hour index
   const rainHours=[];
-  for(let i=HR_START;i<=HR_END;i++){ const x=+pr[i]||0; if(x>=0.2) rainHours.push([i,x]); }
+  let missHrs=0, nHrs=0;
+  for(let i=HR_START;i<=HR_END;i++){ nHrs++;
+    const v=pr[i]; if(v==null||!isFinite(v)){ missHrs++; continue; }   // missing ≠ 0 mm
+    if(v>=0.2) rainHours.push([i,+v]); }
   let rainLines;
-  if(!rainHours.length){
-    rainLines=[L("未来24小时预报无雨","No rain forecast next 24h")];
+  if(missHrs===nHrs){
+    rainLines=[L("降雨数据缺失 — 本模式未提供逐时雨量，请换模式查看","Rain data missing — this model sent no hourly rain; try another model")];
+  } else if(!rainHours.length){
+    rainLines=[missHrs?L(`有数据的时段无雨（${missHrs} 小时缺数据）`,`No rain in the hours with data (${missHrs} h missing)`)
+                      :L("未来24小时预报无雨","No rain forecast next 24h")];
   } else {
     const cap=8;   // keep the list short — WhatsApp readers dislike long scrolls
     const shown=rainHours.slice(0,cap);
@@ -3041,6 +3158,7 @@ document.getElementById("shareBtn").onclick=()=>{
       rainLines.push(`${atH(i)} · ${x.toFixed(1)} mm`);
     }
     if(rainHours.length>cap) rainLines.push(L(`…及另 ${rainHours.length-cap} 小时`,`…and ${rainHours.length-cap} more h`));
+    if(missHrs) rainLines.push(L(`（${missHrs} 小时缺雨量数据）`,`(${missHrs} h with no rain data)`));
   }
   // plain-language day summary instead of raw CAPE/CIN/PW numbers
   const capeW=(c)=>c==null?null:c>=2500?L("极强","v.strong"):c>=1500?L("很强","strong"):c>=800?L("中等","moderate"):c>=300?L("偏弱","weak"):L("很弱","v.weak");
