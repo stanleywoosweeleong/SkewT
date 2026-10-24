@@ -5,7 +5,7 @@
    app fully usable with no connection.
    Bumping CACHE_VERSION is still good hygiene (it purges old caches on activate),
    but is no longer required for users to receive updates. */
-const CACHE_VERSION = "skewt-v90-codex-fixes";
+const CACHE_VERSION = "skewt-v91-trilang";
 
 self.addEventListener("install", e => self.skipWaiting());
 
