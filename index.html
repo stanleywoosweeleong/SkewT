@@ -1488,13 +1488,20 @@ function farmerSummaryParts(){
   if(cls==="stable" && (worst>=2||ensWet)) cls="stableWet";
   const noUpper = cls==="unknown";
   // daylight working block (spray / sun-drying / field work) — see the spray-window note below
-  const WORK_FROM=7, WORK_TO=18;                     // usable from 07:00, done by 18:00
+  // field work runs from 07:00 until last usable light at ~19:30, so the 19:00 hour counts
+  const WORK_FROM=7, WORK_LAST_HR=19, WORK_END_LBL="19:30";
   const hrOf=(i)=>+String(h.time[i]).slice(11,13);
-  const isWork=(i)=>{ const hr=hrOf(i); return hr>=WORK_FROM && hr<WORK_TO; };
+  const isWork=(i)=>{ const hr=hrOf(i); return hr>=WORK_FROM && hr<=WORK_LAST_HR; };
   const wetAt=(i)=>{ const st=(typeof ENS!=="undefined"&&ENS&&ENS.stats)?ENS.stats[i]:null;
     return (st&&st.t1>=40) || (RISK_LEVELS[i]??0)>=2; };
   let wStart=null, wEnd=null;
   for(let i=HR_START;i<=HR_END;i++){ if(isWork(i)){ if(wStart===null)wStart=i; wEnd=i; } else if(wStart!==null) break; }
+  // under ~3 h of light left today isn't a spray window (mix, spray, let it dry): use tomorrow's block
+  if(wStart!==null && wEnd-wStart+1<3 && hrOf(wEnd)===WORK_LAST_HR){
+    let s2=null, e2=null;
+    for(let i=wEnd+1;i<=HR_END;i++){ if(isWork(i)){ if(s2===null)s2=i; e2=i; } else if(s2!==null) break; }
+    if(s2!==null){ wStart=s2; wEnd=e2; }
+  }
   const inWorkNow = wStart===HR_START;
   let wRainI=null;
   if(wStart!==null) for(let i=wStart;i<=wEnd;i++){ if(wetAt(i)){ wRainI=i; break; } }
@@ -1535,10 +1542,11 @@ function farmerSummaryParts(){
     if(maxT5>=40) ensLine+=L(" 雨水够用，可暂停灌溉。"," Rain should be enough — you can pause irrigation."," Hujan sepatutnya mencukupi — anda boleh hentikan pengairan seketika.");
   }
   // spray / sun-drying window: these are DAYLIGHT jobs. Nobody sprays at 8 pm, so the
-  // window is the next block of working hours (WORK_FROM–WORK_TO farm time) — today's
+  // window is the next block of working hours (07:00–19:30 farm time) — today's
   // if we're in it, otherwise tomorrow morning's — not the hours starting "now".
   const dryHrs = (wStart!==null&&wRainI!=null) ? wRainI-wStart : null;
-  const wEndLbl = wEnd!=null ? at(wEnd+1<h.time.length?wEnd+1:wEnd) : "";
+  // block ends at last light (19:30) unless the forecast window cuts it short
+  const wEndLbl = wEnd==null ? "" : hrOf(wEnd)===WORK_LAST_HR ? WORK_END_LBL : at(wEnd+1<h.time.length?wEnd+1:wEnd);
   // overnight rain before the next working block → leaves are wet at dawn
   let nightRainI=null;
   if(!inWorkNow && wStart!==null) for(let i=HR_START;i<wStart;i++){ if(wetAt(i)){ nightRainI=i; break; } }
