@@ -1487,14 +1487,31 @@ function farmerSummaryParts(){
   }
   if(cls==="stable" && (worst>=2||ensWet)) cls="stableWet";
   const noUpper = cls==="unknown";
+  // daylight working block (spray / sun-drying / field work) — see the spray-window note below
+  const WORK_FROM=7, WORK_TO=18;                     // usable from 07:00, done by 18:00
+  const hrOf=(i)=>+String(h.time[i]).slice(11,13);
+  const isWork=(i)=>{ const hr=hrOf(i); return hr>=WORK_FROM && hr<WORK_TO; };
+  const wetAt=(i)=>{ const st=(typeof ENS!=="undefined"&&ENS&&ENS.stats)?ENS.stats[i]:null;
+    return (st&&st.t1>=40) || (RISK_LEVELS[i]??0)>=2; };
+  let wStart=null, wEnd=null;
+  for(let i=HR_START;i<=HR_END;i++){ if(isWork(i)){ if(wStart===null)wStart=i; wEnd=i; } else if(wStart!==null) break; }
+  const inWorkNow = wStart===HR_START;
+  let wRainI=null;
+  if(wStart!==null) for(let i=wStart;i<=wEnd;i++){ if(wetAt(i)){ wRainI=i; break; } }
   // sentence 1: what kind of day + when
+  // first risky hour inside the working block (a 20:00 storm says nothing about tomorrow's work)
+  let heatHi=null; if(wStart!==null) for(let i=wStart;i<=wEnd;i++){ if((RISK_LEVELS[i]??0)>=2){ heatHi=i; break; } }
   const what={
     hidden:  L(`地面看似平静，但上层已蓄能${firstHi!=null?` — 约 ${atDay(firstHi)} 后风暴风险明显升高`:""}。别被早上的好天骗了。`,
                `The surface looks calm but fuel is loaded aloft${firstHi!=null?` — storm risk rises clearly after ~${atDay(firstHi)}`:""}. Don't trust the quiet morning.`,`Permukaan nampak tenang tetapi bahan api bermuatan di atas${firstHi!=null?` — risiko ribut meningkat jelas selepas ~${atDay(firstHi)}`:""}. Jangan percaya pagi yang tenang.`),
-    loaded:  L(`全天蓄能充足，${firstHi!=null?`约 ${atDay(firstHi)} 起`:"随时"}可能起雷暴 — 没有可靠的安全窗口。`,
+    loaded:  (firstHi!=null && wStart!==null && heatHi==null && wRainI==null)
+      ? L(`大气蓄能充足，约 ${atDay(firstHi)} 起可能起雷暴，但不在作业时段内 — 作业时段见下。`,
+          `Storm fuel is loaded — storms possible from ~${atDay(firstHi)}, outside working hours; see the work window below.`,`Bahan api ribut bermuatan — ribut mungkin dari ~${atDay(firstHi)}, di luar waktu kerja; lihat tempoh kerja di bawah.`)
+      : L(`全天蓄能充足，${firstHi!=null?`约 ${atDay(firstHi)} 起`:"随时"}可能起雷暴 — 没有可靠的安全窗口。`,
                `Loaded all day — storms possible ${firstHi!=null?`from ~${atDay(firstHi)}`:"anytime"}; no reliable safe window.`,`Bermuatan sepanjang hari — ribut mungkin ${firstHi!=null?`dari ~${atDay(firstHi)}`:"bila-bila masa"}; tiada tempoh selamat yang boleh diharap.`),
-    heating: L(`风暴要等太阳加热，${firstHi!=null?`大约 ${atDay(firstHi)} 前`:"上午"}是可用的作业窗口。`,
-               `Storms wait for heating — ${firstHi!=null?`before ~${atDay(firstHi)}`:"the morning"} is a usable work window.`,`Ribut menunggu pemanasan — ${firstHi!=null?`sebelum ~${atDay(firstHi)}`:"waktu pagi"} sesuai untuk bekerja.`),
+    heating: heatHi!=null
+      ? L(`风暴要等太阳加热，大约 ${atDay(heatHi)} 前是可用的作业窗口。`,`Storms wait for heating — before ~${atDay(heatHi)} is a usable work window.`,`Ribut menunggu pemanasan — sebelum ~${atDay(heatHi)} sesuai untuk bekerja.`)
+      : L(`风暴要等太阳加热，上午是可用的作业窗口。`,`Storms wait for heating — the morning is a usable work window.`,`Ribut menunggu pemanasan — waktu pagi sesuai untuk bekerja.`),
     unknown: L(`高空数据缺失，无法判断风暴潜势${firstRainI!=null?` — 预报约 ${atDay(firstRainI)} 有雨`:""}。请参考雨量预报并留意天色。`,
                `Upper-air data unavailable — storm potential can't be judged${firstRainI!=null?`; rain forecast around ${atDay(firstRainI)}`:""}. Go by the rain forecast and watch the sky.`,`Data udara atas tiada — potensi ribut tidak dapat dinilai${firstRainI!=null?`; hujan diramal sekitar ${atDay(firstRainI)}`:""}. Ikut ramalan hujan dan perhatikan langit.`),
     stableWet: L(`大气稳定、雷暴燃料少，但预报${firstRainI!=null?`约 ${atDay(firstRainI)} 起`:"今天"}有雨 — 喷药、晾晒请避开下雨时段。`,
@@ -1517,44 +1534,49 @@ function farmerSummaryParts(){
     // irrigation cue: if a useful soaking looks likely, suggest holding back watering
     if(maxT5>=40) ensLine+=L(" 雨水够用，可暂停灌溉。"," Rain should be enough — you can pause irrigation."," Hujan sepatutnya mencukupi — anda boleh hentikan pengairan seketika.");
   }
-  // spray window: simply state WHEN rain is expected and how much lead time there is.
-  // No "day/night" labels — the farmer reads the clock themselves; we just name the hour
-  // (with a tomorrow/day-after tag when it crosses midnight) and how much runway is left.
-  const hrOf=(i)=>+String(h.time[i]).slice(11,13);
-  const leadHrs = firstRainI!=null ? (firstRainI-HR_START) : null;   // hours from "now" until rain
+  // spray / sun-drying window: these are DAYLIGHT jobs. Nobody sprays at 8 pm, so the
+  // window is the next block of working hours (WORK_FROM–WORK_TO farm time) — today's
+  // if we're in it, otherwise tomorrow morning's — not the hours starting "now".
+  const dryHrs = (wStart!==null&&wRainI!=null) ? wRainI-wStart : null;
+  const wEndLbl = wEnd!=null ? at(wEnd+1<h.time.length?wEnd+1:wEnd) : "";
+  // overnight rain before the next working block → leaves are wet at dawn
+  let nightRainI=null;
+  if(!inWorkNow && wStart!==null) for(let i=HR_START;i<wStart;i++){ if(wetAt(i)){ nightRainI=i; break; } }
   let windowLine="";
-  if(noUpper && firstRainI==null){
-    windowLine=L("🌂 预报暂无雨，但风暴潜势无法评估 — 留意午后堆积的云。","🌂 No rain in the forecast, but storm potential can't be assessed — watch for afternoon build-ups.","🌂 Tiada hujan dalam ramalan, tetapi potensi ribut tidak dapat dinilai — awasi awan yang menimbun pada waktu petang.");
-  } else if(firstRainI!=null && leadHrs>=8){
-    windowLine=L(`🌂 长时间干爽 — 雨预计约 ${atDay(firstRainI)} 才到；喷药、晾晒都有充裕窗口。`,
-                 `🌂 Long dry spell — rain not expected until ~${atDay(firstRainI)}; plenty of window for spraying and drying.`,`🌂 Tempoh kering panjang — hujan tidak dijangka sehingga ~${atDay(firstRainI)}; banyak masa untuk menyembur dan menjemur.`);
-  } else if(firstRainI!=null && leadHrs>=3){
-    windowLine=L(`🌂 约 ${atDay(firstRainI)} 前干爽 — 要喷药/叶面肥就趁早，赶在雨前喷完晾干。`,
-                 `🌂 Dry until about ${atDay(firstRainI)} — if spraying, do it early and let it dry before the rain.`,`🌂 Kering hingga kira-kira ${atDay(firstRainI)} — jika menyembur, buat awal dan biarkan kering sebelum hujan.`);
-  } else if(firstRainI!=null){
-    windowLine=L(`🌂 雨可能很快（约 ${atDay(firstRainI)}）就到 — 喷药窗口很窄，务必看准短暂的干爽时段。`,
-                 `🌂 Rain may arrive soon (around ${atDay(firstRainI)}) — the spray window is narrow; watch for a brief dry break.`,`🌂 Hujan mungkin tiba tidak lama lagi (sekitar ${atDay(firstRainI)}) — tempoh menyembur sempit; perhatikan selang kering yang singkat.`);
+  if(wStart!==null){
+    const when = inWorkNow ? "" : L(`下一个作业时段：${atDay(wStart)} 起。`,`Next work window from ${atDay(wStart)}. `,`Tempoh kerja seterusnya dari ${atDay(wStart)}. `);
+    const night = nightRainI!=null ? L(`夜间约 ${atDay(nightRainI)} 有雨，清晨叶面可能仍湿，等干了再喷。`,`Rain overnight from ~${atDay(nightRainI)} — leaves may still be wet at dawn; let them dry before spraying. `,`Hujan pada waktu malam dari ~${atDay(nightRainI)} — daun mungkin masih basah pada waktu subuh; biarkan kering sebelum menyembur. `) : "";
+    let body;
+    if(wRainI==null && noUpper){
+      body=L(`作业时段（至 ${wEndLbl}）预报无雨，但风暴潜势无法评估 — 留意午后堆积的云。`,`No rain forecast through the work day (to ${wEndLbl}), but storm potential can't be assessed — watch for afternoon build-ups.`,`Tiada hujan diramal sepanjang hari kerja (hingga ${wEndLbl}), tetapi potensi ribut tidak dapat dinilai — awasi awan yang menimbun pada waktu petang.`);
+    } else if(wRainI==null){
+      body=L(`作业时段（至 ${wEndLbl}）预计干爽 — 喷药、晾晒都有充裕窗口。`,`Dry through the work day (to ${wEndLbl}) — plenty of window for spraying and drying.`,`Kering sepanjang hari kerja (hingga ${wEndLbl}) — banyak masa untuk menyembur dan menjemur.`);
+    } else if(dryHrs>=3){
+      body=L(`约 ${atDay(wRainI)} 前干爽 — 要喷药/叶面肥就趁早，赶在雨前喷完晾干。`,`Dry until about ${atDay(wRainI)} — if spraying, do it early and let it dry before the rain.`,`Kering hingga kira-kira ${atDay(wRainI)} — jika menyembur, buat awal dan biarkan kering sebelum hujan.`);
+    } else {
+      body=L(`作业时段一开始（约 ${atDay(wRainI)}）就可能下雨 — 喷药窗口很窄，务必看准短暂的干爽时段。`,`Rain likely early in the work window (around ${atDay(wRainI)}) — the spray window is narrow; watch for a brief dry break.`,`Hujan berkemungkinan awal dalam tempoh kerja (sekitar ${atDay(wRainI)}) — tempoh menyembur sempit; perhatikan selang kering yang singkat.`);
+    }
+    windowLine="🌂 "+when+night+body;
   }
   // three work lights
   // --- work lights mapped to how durian farmers actually decide ---
-  // Some jobs want a DRY window (spray, sun-drying); others are BETTER before rain
-  // (seeding/fertilizer — rain waters it in); transport/harvest is a caution on wet days.
-  const sprayEndI=Math.min(HR_END,HR_START+11);   // spray & sun-out happen in the morning
-  let mornBad=false; for(let i=HR_START;i<=sprayEndI;i++) if((RISK_LEVELS[i]??0)>=2) mornBad=true;
-  let mornT1=0, dayT1=0, dayT5=0, dayT10=0;
+  // Some jobs want a DRY window (spray, sun-drying) — judged over the working block above;
+  // others are BETTER before rain (seeding/fertilizer — rain waters it in) — judged over the whole window.
+  let dayT1=0, dayT5=0, dayT10=0, wT1=0, wT5=0, wWorst=0;
+  if(wStart!==null) for(let i=wStart;i<=wEnd;i++) wWorst=Math.max(wWorst,RISK_LEVELS[i]??0);
   if(typeof ENS!=="undefined"&&ENS&&ENS.stats){
     for(let i=HR_START;i<=HR_END;i++){const st=ENS.stats[i];if(!st)continue;
-      if(i<=sprayEndI)mornT1=Math.max(mornT1,st.t1);
+      if(wStart!==null&&i>=wStart&&i<=wEnd){ wT1=Math.max(wT1,st.t1); wT5=Math.max(wT5,st.t5); }
       dayT1=Math.max(dayT1,st.t1); dayT5=Math.max(dayT5,st.t5); dayT10=Math.max(dayT10,st.t10);}
   }
   const light=(bad,warn)=>bad?"bad":warn?"warn":"ok";
   const mark=(c)=>c==="ok"?"✓":c==="warn"?"⚠":"✗";
   // spray: we give the window and trust the farmer's judgment — so this is informational, not a veto.
-  // green when there's a usable dry window (rain at least ~3h out); amber if rain comes soon.
-  const sprayWindowOK = (firstRainI==null) || (leadHrs>=3);
+  // green when the working block has a usable dry stretch (rain ≥3 h after it opens); amber otherwise.
+  const sprayWindowOK = wStart!==null && (wRainI==null || dryHrs>=3) && nightRainI==null;
   // without upper-air data the storm half of the risk is unknown: no green lights
   const spray = noUpper ? "warn" : sprayWindowOK ? "ok" : "warn";       // chemical / foliar spray
-  const sundry=light(dayT5>=50||worst>=3, noUpper||dayT1>=40||worst>=2); // laundry / produce sunbathing
+  const sundry=light(wT5>=50||wWorst>=3, noUpper||wT1>=40||wWorst>=2); // laundry / produce sunbathing
   // RAIN-positive job: seeding & fertilizer are BEST just before decent rain waters them in.
   // green when useful rain is likely (and not a destructive storm), grey when the day is bone-dry.
   const seedFert = (dayT10>=40)?"warn"                           // heavy storm — hold off, wash-out risk
