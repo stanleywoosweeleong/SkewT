@@ -718,20 +718,23 @@ async function toggleSonde(){
   };
   try{
     // 1) nearest station; if stale, one cache-busted re-check (worker may hold an older cycle)
-    let best=await getStn(ranked[0],false);
-    if(ageOf(best.time)>13){
+    let best=null, lastErr=null;
+    try{ best=await getStn(ranked[0],false); }catch(e){ lastErr=e; }
+    if(best&&ageOf(best.time)>13){
       try{ const f=await getStn(ranked[0],true); if(ageOf(f.time)<ageOf(best.time)) best=f; }catch(_){}
     }
     // 2) still stale? see whether the next two nearest stations launched more recently —
     //    a fresher balloon 200 km away can beat a 21-hour-old one nearby. Distance stays visible.
-    if(ageOf(best.time)>13){
+    //    Also the fallback path when the nearest station's request failed outright.
+    if(!best||ageOf(best.time)>13){
       for(const st of ranked.slice(1,3)){
         try{
           const alt=await getStn(st,false);
-          if(ageOf(alt.time)<ageOf(best.time)-3) best=alt;   // switch only for a clear freshness win
-        }catch(_){/* try next */}
+          if(!best||ageOf(alt.time)<ageOf(best.time)-3) best=alt;   // switch only for a clear freshness win
+        }catch(e){ lastErr=e; /* try next */ }
       }
     }
+    if(!best) throw lastErr||new Error("no station");
     if(!live()) return;
     SONDE=best;
     SONDE_ON=true; updateSondeUI(); if(DATA)showHour(CUR_I);
@@ -866,6 +869,11 @@ function setModel(api){
 /* ---- shared storm scoring: single source of truth for the ingredients panel,
        the 24-hour risk strip, and the WhatsApp share ---- */
 function stormScores(P,A){
+  if(A.noUpper){
+    const rain=(P.precip!=null)?P.precip:0;
+    const level = rain>=4?3: rain>=0.5?2: rain>=0.1?1:0;
+    return {m:null,i:null,l:null,s:null,branch:-1,level,unknown:true};
+  }
   const pw=A.pw, li=A.LI, ki=A.KI, convT=A.convT, Tnow=P.Tsfc, sh=A.shear;
   const cape=(A.capeMU!=null?A.capeMU:A.cape);   // fuel: most-unstable parcel (sees elevated instability)
   const cin =(A.cinSB!=null?A.cinSB:A.cin);      // cap: what a SURFACE parcel must break through
@@ -888,6 +896,7 @@ function stormScores(P,A){
   return {m,i,l,s:sc,branch,level};
 }
 function stormVerdict(branch){
+  if(branch===-1) return [L("❔ 高空数据缺失 — 无法评估风暴要素（CAPE/水汽/抬升）。只参考预报降雨。","❔ Upper-air data unavailable — storm ingredients (CAPE / moisture / lift) can't be assessed. Rely on forecast rain only.","❔ Data udara atas tiada — bahan ribut (CAPE / kelembapan / naikan) tidak dapat dinilai. Rujuk ramalan hujan sahaja."),"var(--faint)"];
   if(branch===3) return [L("⛈ 风暴要素已齐备 — 留意云层堆高，午后尤甚。","⛈ Storm ingredients are IN PLACE — watch for build-up, especially through the afternoon.","⛈ Bahan ribut SUDAH ADA — awasi pembentukan awan, terutamanya sepanjang petang."),"var(--danger)"];
   if(branch===2) return [L("🌦 可能有阵雨/雷暴 — 要素大致具备，但还差触发。","🌦 Showers/storms possible — the pieces are loosely there but need a trigger.","🌦 Hujan/ribut mungkin — bahannya ada sedikit tetapi perlu pencetus."),"var(--warn)"];
   if(branch===1) return [L("🌫 湿而稳定 — 更可能是低云、毛毛雨或雾，而非雷暴。","🌫 Moist but stable — expect low cloud, drizzle or fog rather than storms.","🌫 Lembap tetapi stabil — jangkakan awan rendah, gerimis atau kabus, bukan ribut."),"var(--dew)"];
@@ -1417,10 +1426,25 @@ function updateEnsHour(i){
     : "";
 }
 /* ---- farmer's bottom line: one plain-language conclusion after all the instruments ---- */
-let RISK_LEVELS={}, A_NOW=null;
+let RISK_LEVELS={}, RISK_CLS={}, A_NOW=null;
+// Day class from every hour in the window: the worst scenario wins, so a stable "now"
+// can never be reported as a quiet day when storms are forecast later. Hours without
+// upper-air data are "unknown"; a day is only called stable if every hour was checked.
+const CLS_RANK={loaded:4,hidden:3,heating:2,mixed:1,stable:0};
+function dayParcelClass(){
+  let worst=null, unknown=0, n=0;
+  for(let i=HR_START;i<=HR_END;i++){
+    const c=RISK_CLS[i]; if(c===undefined) continue; n++;
+    if(c==="unknown"){ unknown++; continue; }
+    if(worst===null||CLS_RANK[c]>CLS_RANK[worst]) worst=c;
+  }
+  if(!n){ const A=LAST_A; return A?classifyParcels(A):null; }
+  if(worst===null) return "unknown";
+  if(worst==="stable"&&unknown>0) return "unknown";
+  return worst;
+}
 function farmerSummaryParts(){
-  const A0=(A_NOW||LAST_A);
-  if(!DATA||!A0)return null;
+  if(!DATA||!(A_NOW||LAST_A))return null;
   const h=DATA.hourly;
   // worst risk ahead + when it starts (from the visible day)
   let worst=0, firstHi=null;
@@ -1454,7 +1478,15 @@ function farmerSummaryParts(){
   }
   let riskFrom=null,riskTo=null;
   for(let i=HR_START;i<=HR_END;i++){ if((RISK_LEVELS[i]??0)>=2){ if(riskFrom===null)riskFrom=i; riskTo=i; } }
-  const cls=classifyParcels(A0);
+  let cls=dayParcelClass()||"unknown";
+  // forecast rain/storm signal in the window overrides a "stable" physics read:
+  // never pair "plan spraying with confidence" with a wet or risky hour ahead.
+  let ensWet=false;
+  if(typeof ENS!=="undefined"&&ENS&&ENS.stats){
+    for(let i=HR_START;i<=HR_END;i++){ const st=ENS.stats[i]; if(st&&st.t1>=40){ ensWet=true; break; } }
+  }
+  if(cls==="stable" && (worst>=2||ensWet)) cls="stableWet";
+  const noUpper = cls==="unknown";
   // sentence 1: what kind of day + when
   const what={
     hidden:  L(`地面看似平静，但上层已蓄能${firstHi!=null?` — 约 ${atDay(firstHi)} 后风暴风险明显升高`:""}。别被早上的好天骗了。`,
@@ -1463,6 +1495,10 @@ function farmerSummaryParts(){
                `Loaded all day — storms possible ${firstHi!=null?`from ~${atDay(firstHi)}`:"anytime"}; no reliable safe window.`,`Bermuatan sepanjang hari — ribut mungkin ${firstHi!=null?`dari ~${atDay(firstHi)}`:"bila-bila masa"}; tiada tempoh selamat yang boleh diharap.`),
     heating: L(`风暴要等太阳加热，${firstHi!=null?`大约 ${atDay(firstHi)} 前`:"上午"}是可用的作业窗口。`,
                `Storms wait for heating — ${firstHi!=null?`before ~${atDay(firstHi)}`:"the morning"} is a usable work window.`,`Ribut menunggu pemanasan — ${firstHi!=null?`sebelum ~${atDay(firstHi)}`:"waktu pagi"} sesuai untuk bekerja.`),
+    unknown: L(`高空数据缺失，无法判断风暴潜势${firstRainI!=null?` — 预报约 ${atDay(firstRainI)} 有雨`:""}。请参考雨量预报并留意天色。`,
+               `Upper-air data unavailable — storm potential can't be judged${firstRainI!=null?`; rain forecast around ${atDay(firstRainI)}`:""}. Go by the rain forecast and watch the sky.`,`Data udara atas tiada — potensi ribut tidak dapat dinilai${firstRainI!=null?`; hujan diramal sekitar ${atDay(firstRainI)}`:""}. Ikut ramalan hujan dan perhatikan langit.`),
+    stableWet: L(`大气稳定、雷暴燃料少，但预报${firstRainI!=null?`约 ${atDay(firstRainI)} 起`:"今天"}有雨 — 喷药、晾晒请避开下雨时段。`,
+               `Little storm fuel, but rain is forecast${firstRainI!=null?` from ~${atDay(firstRainI)}`:" today"} — plan spraying and drying around it.`,`Sedikit bahan api ribut, tetapi hujan diramal${firstRainI!=null?` dari ~${atDay(firstRainI)}`:" hari ini"} — rancang semburan dan penjemuran mengelakkannya.`),
     stable:  L(`今天大体安静：连隐藏燃料都查过了，没有。放心安排喷药与晒果。`,
                `A genuinely quiet day — hidden fuel checked, none found. Plan spraying and drying with confidence.`,`Hari yang benar-benar tenang — bahan api tersembunyi diperiksa, tiada ditemui. Rancang semburan dan penjemuran dengan yakin.`),
     mixed:   L(`处于边缘状态${firstHi!=null?`，约 ${atDay(firstHi)} 后需留意`:""} — 按小时盯着走，别做长承诺。`,
@@ -1487,7 +1523,9 @@ function farmerSummaryParts(){
   const hrOf=(i)=>+String(h.time[i]).slice(11,13);
   const leadHrs = firstRainI!=null ? (firstRainI-HR_START) : null;   // hours from "now" until rain
   let windowLine="";
-  if(firstRainI!=null && leadHrs>=8){
+  if(noUpper && firstRainI==null){
+    windowLine=L("🌂 预报暂无雨，但风暴潜势无法评估 — 留意午后堆积的云。","🌂 No rain in the forecast, but storm potential can't be assessed — watch for afternoon build-ups.","🌂 Tiada hujan dalam ramalan, tetapi potensi ribut tidak dapat dinilai — awasi awan yang menimbun pada waktu petang.");
+  } else if(firstRainI!=null && leadHrs>=8){
     windowLine=L(`🌂 长时间干爽 — 雨预计约 ${atDay(firstRainI)} 才到；喷药、晾晒都有充裕窗口。`,
                  `🌂 Long dry spell — rain not expected until ~${atDay(firstRainI)}; plenty of window for spraying and drying.`,`🌂 Tempoh kering panjang — hujan tidak dijangka sehingga ~${atDay(firstRainI)}; banyak masa untuk menyembur dan menjemur.`);
   } else if(firstRainI!=null && leadHrs>=3){
@@ -1514,8 +1552,9 @@ function farmerSummaryParts(){
   // spray: we give the window and trust the farmer's judgment — so this is informational, not a veto.
   // green when there's a usable dry window (rain at least ~3h out); amber if rain comes soon.
   const sprayWindowOK = (firstRainI==null) || (leadHrs>=3);
-  const spray = sprayWindowOK ? "ok" : "warn";       // chemical / foliar spray
-  const sundry=light(dayT5>=50||worst>=3, dayT1>=40||worst>=2); // laundry / produce sunbathing
+  // without upper-air data the storm half of the risk is unknown: no green lights
+  const spray = noUpper ? "warn" : sprayWindowOK ? "ok" : "warn";       // chemical / foliar spray
+  const sundry=light(dayT5>=50||worst>=3, noUpper||dayT1>=40||worst>=2); // laundry / produce sunbathing
   // RAIN-positive job: seeding & fertilizer are BEST just before decent rain waters them in.
   // green when useful rain is likely (and not a destructive storm), grey when the day is bone-dry.
   const seedFert = (dayT10>=40)?"warn"                           // heavy storm — hold off, wash-out risk
@@ -1541,6 +1580,7 @@ function renderFarmerSummary(){
 }
 /* ---- parcel-pattern matrix: classify the SB/ML/MU disagreement into an operational scenario ---- */
 function classifyParcels(A){
+  if(A.noUpper) return "unknown";
   const sb=A.capeSB??0, ml=A.capeML??0, mu=A.capeMU??0;
   const hi=800, lo=300;
   if(mu>=hi && sb<Math.max(400,mu*0.35)) return "hidden";     // fuel above a lid
@@ -1568,7 +1608,7 @@ function renderParcelMatrix(A){
   const act=classifyParcels(A);
   const f0=(x)=>x!=null&&isFinite(x)?Math.round(x):"—";
   el.innerHTML=collapsibleSection("sec-matrix", L("气块矩阵 · 今天属于哪种天？","Parcel matrix · what kind of day is this?","Matriks bungkusan udara · hari jenis apakah ini?"),
-    `<div class="pm-sub">SB ${f0(A.capeSB)} · ML ${f0(A.capeML)} · MU ${f0(A.capeMU)} J/kg</div>`+
+    `<div class="pm-sub">SB ${f0(A.capeSB)} · ML ${f0(A.capeML)} · MU ${f0(A.capeMU)} J/kg${A.noUpper?L(" · 高空数据缺失"," · upper-air data unavailable"," · data udara atas tiada"):""}</div>`+
     parcelMatrixRows().map(r=>`<div class="pm-row${r.k===act?" on":""}"><div class="pm-ic">${r.ic}</div><div><div class="pm-t">${r.t}</div><div class="pm-d">${r.d}</div></div></div>`).join(""),
     true);
   wireCollapsibles();
@@ -1870,7 +1910,12 @@ function analyze(P){
   // total column & PBL depth-ish
   const dd=sfc.T-sfc.Td; // surface dewpoint depression
 
-  return {path,lclP,lclHt,cape,capeModel,cin,elP,lfcP,pw,LI,Tlcl:K2C(Tlcl),rhSfc,effEst,
+  // Upper-air coverage check: with too few pressure levels (e.g. a model that sent only
+  // the surface), CAPE/PW/LI integrate over nothing and come out as 0 — which reads as a
+  // confidently "stable, dry" sky. Missing data must say "unavailable", not "0".
+  const nUpper=prof.filter(l=>!l.sfc).length;
+  const noUpper = nUpper<4 || prof[prof.length-1].p>500;
+  const OUT={noUpper,path,lclP,lclHt,cape,capeModel,cin,elP,lfcP,pw,LI,Tlcl:K2C(Tlcl),rhSfc,effEst,
     parcels:PARCELS, parcelSel:PARCEL_SEL,
     capeSB:Math.round(pSB.cape),capeML:Math.round(pML.cape),capeMU:Math.round(pMU.cape),
     cinSB:Math.round(pSB.cin), muStartP:(mi===0?null:mL.p),
@@ -1883,6 +1928,10 @@ function analyze(P){
     srh01,srh03,ebwd,bwd06,
     bunkR:bunkRmo,bunkL:bunkLmo,
     profWind:prof.filter(l=>l.ws!=null).map(l=>({p:l.p,ws:l.ws,wd:l.wd,uv:toUV(l.ws,l.wd),ht:heightAtP(l.p)}))};
+  if(noUpper){
+    for(const k of ["cape","cin","pw","LI","effEst","capeSB","capeML","capeMU","cinSB","muStartP","KI","TT","SI","dcape"]) OUT[k]=null;
+  }
+  return OUT;
 }
 
 /* ---------- svg helpers ---------- */
@@ -2513,6 +2562,7 @@ function drawWindProfile(A){
 /* ---------- verdict + cards ---------- */
 function pill(txt,col){return `<span class="pill" style="background:${col};color:#12060a">${txt}</span>`;}
 function capeVerdict(c){
+  if(c==null)return[L("不可用","Unavailable","Tiada data"),L("缺少高空数据，无法计算风暴能量。","Upper-air data missing — storm fuel can't be computed.","Data udara atas tiada — bahan api ribut tidak dapat dikira."),"var(--faint)"];
   if(c<100)return[L("稳定","Stable","Stabil"),L("没有可用的风暴能量 — 气块不会自行上升。","No meaningful storm fuel — parcels won't rise on their own.","Tiada bahan api ribut yang bermakna — bungkusan udara tidak akan naik sendiri."),"var(--dew)"];
   if(c<500)return[L("边缘","Marginal","Sederhana rendah"),L("不稳定度弱；有触发时可能出现零星阵雨。","Weak instability; isolated showers possible with a trigger.","Ketidakstabilan lemah; hujan lebat sekejap terpencil mungkin jika ada pencetus."),"var(--parcel)"];
   if(c<1500)return[L("中等","Moderate","Sederhana"),L("只要有抬升，就有真实的雷暴潜势。","Real thunderstorm potential if something lifts the air.","Potensi ribut petir sebenar jika ada sesuatu yang menaikkan udara."),"var(--warn)"];
@@ -2642,6 +2692,14 @@ function renderIngredients(P,A){
   const ing=[];
   // 1. MOISTURE — is there enough water?
   const S=stormScores(P,A);
+  if(S.unknown){
+    const [uv,ucol]=stormVerdict(-1);
+    document.getElementById("ingredients").innerHTML=
+      collapsibleSection("sec-storm", L("会下雨/雷暴吗？","Is a storm coming?","Adakah ribut akan datang?"),
+      `<div class="ingpanel"><div class="ingverdict" style="border-color:${ucol}">${uv}</div></div>`, true);
+    wireCollapsibles();
+    return;
+  }
   const pw=A.pw, dd=A.dd;
   const mScore=S.m;
   ing.push(["💧",L("水汽","Moisture","Kelembapan"),L("空气中的水够吗？","Is there enough water in the air?","Adakah cukup air di udara?"),mScore,
@@ -2890,11 +2948,12 @@ function buildHourStrip(){
   // 24-hour storm-risk strip: one segment per hour tile, same window
   const rs=document.getElementById("riskstrip");
   let dayMaxWs=0, dayMaxHt=0;
-  RISK_LEVELS={};
+  RISK_LEVELS={}; RISK_CLS={}; A_NOW=null;
   if(rs){ rs.innerHTML="";
     for(let i=start;i<start+24 && i<h.time.length;i++){
       let lvl=0;
       try{ const P=buildProfile(DATA,i); const A=analyze(P); lvl=stormScores(P,A).level; RISK_LEVELS[i]=lvl;
+        RISK_CLS[i]=A.noUpper?"unknown":classifyParcels(A);
         if(i===start)A_NOW=A;
         (A.profWind||[]).forEach(w=>{ if(w.ws!=null&&w.ws>dayMaxWs)dayMaxWs=w.ws; if(w.ht!=null&&w.ht>dayMaxHt)dayMaxHt=w.ht; });
       }catch(e){}
