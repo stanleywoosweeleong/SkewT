@@ -657,7 +657,7 @@ const MODELS=[
 /* ================= radiosonde overlay (observed balloon vs forecast) =================
    SONDE_WORKER: paste your deployed Cloudflare Worker URL here (see sonde-worker.js).
    Leave empty to disable — the button will show a setup hint instead of failing silently. */
-const APP_BUILD="v90";   // bump together with sw.js CACHE_VERSION on every deploy
+const APP_BUILD="v92";   // bump together with sw.js CACHE_VERSION on every deploy
 const SONDE_WORKER="https://sonde-worker.standphoto.workers.dev";
 const SONDE_STATIONS=[
   {id:"48601",name:"Penang 槟城",lat:5.30,lon:100.27},
@@ -1206,20 +1206,34 @@ function buildProfile(d,i){
   // bottom is 1000 hPa; a 1010 hPa surface sits ~3 px below the frame, inside the viewBox.
   prof.push({p:sp, T:h.temperature_2m[i], Td:h.dew_point_2m[i],
              ws:h.wind_speed_10m[i], wd:h.wind_direction_10m[i], sfc:true});
+  // NOTE (v92) — two profiles on purpose:
+  //   prof  = levels with BOTH temperature and humidity. Every thermodynamic index (CAPE, LCL,
+  //           wet-bulb, PW…) reads this one and assumes Td is present, so it stays strict.
+  //   profT = every level that has a temperature, Td null where the model sends no humidity.
+  //           Only the chart's T curve, wind barbs and the magnifier use it, so a model that
+  //           ships temperature/wind aloft but no humidity still shows its upper air instead
+  //           of collapsing to a one-point "surface-only" profile.
+  const profT=[prof[0]];
   for(const p of LEVELS){
     if(p>sp-5) continue;          // strictly above the surface: never a duplicate pressure
-    const T=h[`temperature_${p}hPa`][i];
-    const rh=h[`relative_humidity_${p}hPa`][i];
-    if(T==null||rh==null) continue;
-    prof.push({p, T, Td:dewFromRH(T,Math.max(1,rh)),
-               ws:h[`wind_speed_${p}hPa`][i], wd:h[`wind_direction_${p}hPa`][i],
-               gh:h[`geopotential_height_${p}hPa`]?h[`geopotential_height_${p}hPa`][i]:null});
+    const tArr=h[`temperature_${p}hPa`], rArr=h[`relative_humidity_${p}hPa`];
+    const T=tArr?tArr[i]:null;
+    const rh=rArr?rArr[i]:null;
+    if(T==null||!isFinite(T)) continue;
+    const hasRH=(rh!=null&&isFinite(rh));
+    const lvl={p, T, Td:hasRH?dewFromRH(T,Math.max(1,rh)):null,
+               ws:h[`wind_speed_${p}hPa`]?h[`wind_speed_${p}hPa`][i]:null,
+               wd:h[`wind_direction_${p}hPa`]?h[`wind_direction_${p}hPa`][i]:null,
+               gh:h[`geopotential_height_${p}hPa`]?h[`geopotential_height_${p}hPa`][i]:null};
+    profT.push(lvl);
+    if(hasRH) prof.push(lvl);
   }
   prof.sort((a,b)=>b.p-a.p);
+  profT.sort((a,b)=>b.p-a.p);
   const g=(k)=>h[k]?h[k][i]:null;
   // missing rain stays null (shown as "—" / "data missing"), never silently becomes 0 mm
   const pr=(h.precipitation&&h.precipitation[i]!=null&&isFinite(h.precipitation[i]))?h.precipitation[i]:null;
-  return {prof, elev:(d.elevation!=null?d.elevation:null), precip:pr,
+  return {prof, profT, elev:(d.elevation!=null?d.elevation:null), precip:pr,
     pop:(h.precipitation_probability&&h.precipitation_probability[i]!=null)?h.precipitation_probability[i]:null,
     cape:h.cape?h.cape[i]:null, time:h.time[i],
     windSpd:g("wind_speed_10m"), windDir:g("wind_direction_10m"), gust:g("wind_gusts_10m"),
@@ -2055,7 +2069,9 @@ function draw(P,A,svgEl){
   }
 
   // environment temperature & dew point
-  const Tpts=prof.map(l=>[xOf(l.T,l.p),yOf(l.p)]);
+  // temperature-only fallback: the model has T aloft but no humidity (see buildProfile note)
+  const tOnly=prof.length<3 && !!P.profT && P.profT.length>=3;
+  const Tpts=(tOnly?P.profT:prof).map(l=>[xOf(l.T,l.p),yOf(l.p)]);
   const Dpts=prof.map(l=>[xOf(l.Td,l.p),yOf(l.p)]);
   // wet-bulb curve: evaporative-cooling temperature, always between dew point and temperature
   {
@@ -2082,9 +2098,11 @@ function draw(P,A,svgEl){
   g0.appendChild(poly(Dpts,"var(--dew)",2.6));
   g0.appendChild(poly(Tpts,"var(--temp)",2.6));
   // compare-model overlay: second model's T/Td in violet
+  let cmpProf=null;                     // compare model's profile, if drawn (magnifier fallback)
   if(COMPARE_MODEL&&DATA2&&DATA2.hourly){
     try{
       const P2=buildProfile(DATA2,CUR_I);
+      cmpProf=P2.prof;
       const t2=[],d2=[];
       for(const l of P2.prof){
         if(l.p>Pbot||l.p<Ptop)continue;
@@ -2127,7 +2145,7 @@ function draw(P,A,svgEl){
   // but they're spaced so feathers never collide, and kept inside the widened viewBox.
   const bx=X1+30;                       // staff column, well right of the cloud bar (X1+2..8)
   let lastBarbY=-1e9;
-  prof.forEach(l=>{
+  (tOnly?P.profT:prof).forEach(l=>{
     if(l.ws==null)return;
     const y=Math.min(Y1-14, Math.max(Y0+14, yOf(l.p)));
     if(Math.abs(y-lastBarbY)<16) return;   // ≥16px apart: feathers (≤~14px) can't overlap
@@ -2158,7 +2176,24 @@ function draw(P,A,svgEl){
   g0.appendChild(el("circle",{cx:xOf(prof[0].Td,prof[0].p),cy:yOf(prof[0].p),r:3.2,fill:"var(--dew)"}));
 
   // ---- persistent draggable magnifier (scoped to this svg) ----
-  CROSS_PROF = prof;
+  // NOTE (v92) — which curve the magnifier reads. It used to follow the selected model only,
+  // so a surface-only model (IFS 9km) switched the lens off even with a comparison model or a
+  // balloon sounding drawn on the chart. Now, when the selected model has no upper air, the
+  // lens falls back to: its temperature-only profile → the comparison model → the observed
+  // sounding. CROSS_SRC records the fallback so the readout can say whose numbers it shows.
+  // Only when none of those exist is the lens hidden (drawMagnifier, surface-only branch).
+  {
+    let cprof=prof, src=null;
+    if(prof.length<3){
+      if(tOnly){ cprof=P.profT; src={kind:"tonly"}; }
+      else if(cmpProf&&cmpProf.length>=3){ cprof=cmpProf; src={kind:"cmp",name:modelShortOf(COMPARE_MODEL)||""}; }
+      else if(SONDE_ON&&SONDE&&SONDE.levels){
+        const sl=SONDE.levels.filter(l=>l&&l.p!=null&&l.T!=null).map(l=>({p:l.p,T:l.T,Td:l.Td})).sort((a,b)=>b.p-a.p);
+        if(sl.length>=3){ cprof=sl; src={kind:"sonde",name:SONDE.stName||""}; }
+      }
+    }
+    CROSS_PROF=cprof; CROSS_SRC=src;
+  }
   const uid = svg.id==="chartBig" ? "big" : "main";
   const cg=el("g",{class:"crossLayer"});
   // horizontal level guide across the chart
@@ -2199,6 +2234,21 @@ function draw(P,A,svgEl){
 
 /* ---------- persistent draggable magnifier ---------- */
 let CROSS_PROF=null, CROSS_POS=null; // CROSS_POS in viewBox coords {x,y}
+let CROSS_SRC=null;   // null = selected model's own profile; else {kind:"tonly"|"cmp"|"sonde",name} (see draw)
+// rough height above the surface (m) from a profile's own temperatures — used when the
+// magnifier reads a fallback curve, where the selected model's height table doesn't apply
+function approxHt(prof,p){
+  let z=0;
+  for(let k=0;k<prof.length-1;k++){
+    const a=prof[k], b=prof[k+1];
+    if(a.p<=p) break;
+    const top=Math.max(b.p,p);
+    const Tt=a.T+(b.T-a.T)*(Math.log(a.p/top)/Math.log(a.p/b.p));
+    z+=Rd*C2K((a.T+Tt)/2)/g*Math.log(a.p/top);
+    if(b.p<=p) break;
+  }
+  return Math.round(z);
+}
 function interpProf(prof,p,key){
   for(let k=0;k<prof.length-1;k++){
     const a=prof[k],b=prof[k+1];
@@ -2217,7 +2267,10 @@ function drawMagnifier(svg){
   if(!CROSS_PROF||!CROSS_POS)return;
   // surface-only model (e.g. IFS 9km): a one-level profile can't say anything about 382 hPa —
   // pin the readout to the surface and say so, rather than extrapolating surface values aloft.
+  const layer=svg.querySelector(".crossLayer");
   if(CROSS_PROF.length<3){
+    // hide the lens outright — left un-positioned it sat at (0,0) as a stray arc in the corner
+    if(layer) layer.style.display="none";
     const sfc=CROSS_PROF[0];
     const tip=document.getElementById(svg.id==="chartBig"?"crossTipBig":"crossTip");
     if(tip&&sfc){
@@ -2229,12 +2282,14 @@ function drawMagnifier(svg){
     }
     return;
   }
+  if(layer) layer.style.display="";
   const x=Math.max(X0,Math.min(X1,CROSS_POS.x));
   const y=Math.max(Y0,Math.min(Y1,CROSS_POS.y));
   const p=pOf(y);
   const T=interpProf(CROSS_PROF,p,"T"), Td=interpProf(CROSS_PROF,p,"Td");
   const ws=interpProf(CROSS_PROF,p,"ws"), wd=interpProf(CROSS_PROF,p,"wd");
-  const ht=(typeof LAST_A!=="undefined"&&LAST_A&&LAST_A.htOfP)?LAST_A.htOfP(p):Math.round((CROSS_PROF[0].p-p)*8);
+  const ht=CROSS_SRC?approxHt(CROSS_PROF,p)
+    :(typeof LAST_A!=="undefined"&&LAST_A&&LAST_A.htOfP)?LAST_A.htOfP(p):Math.round((CROSS_PROF[0].p-p)*8);
   const q=(sel)=>svg.querySelector(sel);
   const hLine=q(".crossH"); if(hLine){hLine.setAttribute("y1",y);hLine.setAttribute("y2",y);}
   const cT=q(".crossT"), cD=q(".crossD");
@@ -2264,7 +2319,19 @@ function drawMagnifier(svg){
     const mr = Td!=null? mixingRatioFromDew(Td,p) : null;
     // plain-language interpretation of this level
     let interp="";
-    if(T!=null&&Td!=null){
+    if(CROSS_SRC){
+      // fallback curve: say whose numbers these are (the selected model has none at this level)
+      const ms=modelShort(), nm=CROSS_SRC.name;
+      let note=
+        CROSS_SRC.kind==="cmp"  ? L(`读数取自对比模式 ${nm} — ${ms} 无高空数据`,`Reading from compare model ${nm} — ${ms} has no upper-air data`,`Bacaan daripada model banding ${nm} — ${ms} tiada data udara atas`) :
+        CROSS_SRC.kind==="sonde"? L(`读数取自实测探空 ${nm} — ${ms} 无高空数据`,`Reading from the observed sounding (${nm}) — ${ms} has no upper-air data`,`Bacaan daripada sondaan cerapan (${nm}) — ${ms} tiada data udara atas`) :
+                                  L(`${ms} 高空无湿度数据 — 仅气温与风；露点及不稳定指标不可用`,`${ms} has no humidity aloft — temperature & wind only; dew point and instability indices unavailable`,`${ms} tiada data kelembapan aras tinggi — suhu & angin sahaja; takat embun dan indeks ketidakstabilan tidak tersedia`);
+      if(T!=null&&Td!=null){
+        const sp=T-Td;
+        note+=" · "+(sp<=1?L("已饱和","saturated","tepu"):sp<=3?L("接近饱和","near saturation","hampir tepu"):sp<=8?L("较湿","fairly moist","agak lembap"):L("干燥层","dry layer","lapisan kering"));
+      }
+      interp=`<span class="ttinterp">💡 ${note}</span>`;
+    } else if(T!=null&&Td!=null){
       const spread=T-Td, bits=[];
       if(spread<=1)      bits.push(L("已饱和 — 此处正是云层","saturated — cloud layer here","tepu — lapisan awan di sini"));
       else if(spread<=3) bits.push(L("接近饱和 — 易成云","near saturation — cloud-prone","hampir tepu — mudah berawan"));
@@ -2303,11 +2370,13 @@ function saturationY(prof){
     const gap=T-Td;
     if(gap<bestGap){ bestGap=gap; bestP=p; }
   }
+  if(bestGap===Infinity) return yOf(700);   // no dew point anywhere (temperature-only profile)
   return yOf(bestP);
 }
 function positionMagnifier(svg){
   if(!CROSS_POS){
-    const y=saturationY(CROSS_PROF);
+    // temperature-only profile has no dew point to find a saturated level with: start mid-chart
+    const y=(CROSS_SRC&&CROSS_SRC.kind==="tonly")?yOf(700):saturationY(CROSS_PROF);
     // sit the puck on the temperature curve at that level (where the lines nearly touch)
     let x=(X0+X1)/2;
     if(CROSS_PROF){ const p=pOf(y), T=interpProf(CROSS_PROF,p,"T"); if(T!=null) x=Math.max(X0,Math.min(X1,xOf(T,p))); }
